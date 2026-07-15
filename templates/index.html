@@ -294,6 +294,26 @@ setTimeout(()=>{
         },500);
     }
 },3000);
+
+setTimeout(function(){
+
+    const toast=document.querySelector(".toast-container");
+
+    if(toast){
+
+        toast.style.opacity="0";
+
+        toast.style.transition=".5s";
+
+        setTimeout(()=>{
+
+            toast.remove();
+
+        },500);
+
+    }
+
+},3000);
 </script>
 </body>
 </html>

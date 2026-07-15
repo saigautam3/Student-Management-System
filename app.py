@@ -109,6 +109,7 @@ def add_student():
     )
 
     conn.commit()
+    flash("Student added successfully!", "success")
 
     cur.close()
     conn.close()
@@ -136,6 +137,7 @@ def delete_student(id):
     )
 
     conn.commit()
+    flash("Student deleted successfully!", "danger")
 
     cur.close()
     conn.close()
@@ -257,6 +259,7 @@ def update_student(id):
     )
 
     conn.commit()
+    flash("Student updated successfully!", "info")
 
     cur.close()
     conn.close()

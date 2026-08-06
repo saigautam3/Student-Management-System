@@ -26,6 +26,9 @@
         .auth-panel.active {
             display: block;
         }
+        .login-wrapper {
+            transition: max-width var(--transition-normal);
+        }
     </style>
 </head>
 <body class="login-body">
@@ -49,8 +52,8 @@
         {% endwith %}
     </div>
 
-    <div class="login-wrapper" style="padding: 20px 0;">
-        <div class="login-card" style="max-width: 520px; width: 90%;">
+    <div class="login-wrapper" id="loginWrapper" style="padding: 20px 0;">
+        <div class="login-card" style="max-width: 580px; width: 100%;">
             
             <!-- 1. SIGN IN PANEL -->
             <div id="loginPanel" class="auth-panel active">
@@ -213,6 +216,13 @@
         function showPanel(panelId) {
             document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
             document.getElementById(panelId).classList.add('active');
+            
+            const wrapper = document.getElementById("loginWrapper");
+            if (panelId === 'loginPanel') {
+                wrapper.style.maxWidth = '440px';
+            } else {
+                wrapper.style.maxWidth = '580px';
+            }
         }
 
         // Auto-dismiss toast notifications

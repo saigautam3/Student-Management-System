@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department Comparison Dashboard | StudentSphere</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .comparison-layout {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .comparison-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .checkbox-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-main);
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.015);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            transition: background var(--transition-fast);
+        }
+
+        .checkbox-label:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .charts-comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .comparison-table th {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 2px solid var(--border-color);
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .comparison-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .comparison-table tr:hover {
+            background: rgba(0,0,0,0.015);
+        }
+    </style>
+</head>
+<body class="light-theme">
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic ERP</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="/" class="menu-item">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/#registry-section" class="menu-item">
+                    <span class="material-icons-round">groups</span>
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item">
+                    <span class="material-icons-round">domain</span>
+                    <span>Departments</span>
+                </a>
+                <a href="/?show_announcements=true" class="menu-item" id="menu-announcements">
+                    <span class="material-icons-round">campaign</span>
+                    <span>Announcements</span>
+                </a>
+                <a href="/calendar" class="menu-item" id="menu-calendar">
+                    <span class="material-icons-round">calendar_month</span>
+                    <span>Academic Calendar</span>
+                </a>
+                <a href="/attendance" class="menu-item" id="menu-attendance">
+                    <span class="material-icons-round">co_present</span>
+                    <span>Attendance</span>
+                </a>
+                <a href="/marks" class="menu-item" id="menu-marks">
+                    <span class="material-icons-round">grade</span>
+                    <span>Academic Marks</span>
+                </a>
+                <a href="/department-comparison" class="menu-item active" id="menu-comparison">
+                    <span class="material-icons-round">compare_arrows</span>
+                    <span>Dept Comparison</span>
+                </a>
+                {% if session['user']['role'] == 'Admin' %}
+                <a href="/faculty" class="menu-item" id="menu-faculty">
+                    <span class="material-icons-round">badge</span>
+                    <span>Faculty Management</span>
+                </a>
+                {% endif %}
+                <a href="/profile" class="menu-item" id="menu-profile">
+                    <span class="material-icons-round">manage_accounts</span>
+                    <span>Faculty Profile</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>📊 Department Comparison Dashboard</h2>
+                    <p class="subtitle">Analyze student cohorts, average GPAs, active ratios, pass rates, and top performers side-by-side</p>
+                </div>
+            </header>
+
+            <div class="comparison-layout">
+                <!-- Left: Department Selector checklist -->
+                <div class="main-card" style="height:fit-content;">
+                    <h3 style="display:flex; align-items:center; gap:8px;">
+                        <span class="material-icons-round" style="color:var(--primary)">filter_list</span>
+                        <span>Select Cohorts</span>
+                    </h3>
+                    <p class="subtitle" style="font-size:11px; margin-top:4px;">Toggle departments to compare metrics dynamically</p>
+                    
+                    <div class="checkbox-list" id="deptCheckboxList">
+                        {% for dept in departments %}
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="{{ dept[0] }}" checked onchange="triggerComparisonUpdate()">
+                            <span>{{ dept[1] }} ({{ dept[2] }})</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Right: Metrics Charts and comparison table -->
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    <!-- Dynamic comparison charts -->
+                    <div class="charts-comparison-grid">
+                        <div class="main-card">
+                            <h3>Average GPA comparison</h3>
+                            <div style="height:250px; position:relative; margin-top:15px;">
+                                <canvas id="gpaCompareChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="main-card">
+                            <h3>Student Count comparison</h3>
+                            <div style="height:250px; position:relative; margin-top:15px;">
+                                <canvas id="cohortCompareChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pass Rates and Active Ratio charts -->
+                    <div class="charts-comparison-grid" style="margin-top:-10px;">
+                        <div class="main-card">
+                            <h3>Academic Pass Rates (%)</h3>
+                            <div style="height:250px; position:relative; margin-top:15px;">
+                                <canvas id="passRateCompareChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="main-card">
+                            <h3>Active to Graduated ratio</h3>
+                            <div style="height:250px; position:relative; margin-top:15px;">
+                                <canvas id="statusRatioCompareChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Table -->
+                    <div class="main-card">
+                        <h3>📋 Detailed Comparison Matrix</h3>
+                        <div style="overflow-x:auto; margin-top:15px;">
+                            <table class="comparison-table">
+                                <thead>
+                                    <tr>
+                                        <th>Department Code</th>
+                                        <th>Department Name</th>
+                                        <th>Total Students</th>
+                                        <th>Average GPA</th>
+                                        <th>Active Ratio</th>
+                                        <th>Academic Pass Rate</th>
+                                        <th>Top Performer</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comparisonTableBody">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Chart handles
+        let gpaChart = null;
+        let cohortChart = null;
+        let passChart = null;
+        let ratioChart = null;
+
+        function triggerComparisonUpdate() {
+            // Get selected department IDs
+            const checkedBoxes = document.querySelectorAll('#deptCheckboxList input[type="checkbox"]:checked');
+            const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+
+            if (selectedIds.length === 0) {
+                // Clear all charts and table
+                if (gpaChart) gpaChart.destroy();
+                if (cohortChart) cohortChart.destroy();
+                if (passChart) passChart.destroy();
+                if (ratioChart) ratioChart.destroy();
+                document.getElementById('comparisonTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">Please select at least one department cohort.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            // Fetch statistics
+            fetch(`/api/departments/compare?ids=${selectedIds.join(',')}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        renderCharts(data.comparison);
+                        renderTable(data.comparison);
+                    }
+                })
+                .catch(err => {
+                    showToast('Failed to load comparison data.', 'danger');
+                });
+        }
+
+        function renderCharts(comparisonData) {
+            const labels = comparisonData.map(c => c.code);
+            
+            // 1. GPA Chart
+            const gpas = comparisonData.map(c => c.avg_gpa);
+            if (gpaChart) gpaChart.destroy();
+            gpaChart = new Chart(document.getElementById('gpaCompareChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Average GPA',
+                        data: gpas,
+                        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { min: 0, max: 10, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // 2. Cohort count chart
+            const studentCounts = comparisonData.map(c => c.students);
+            if (cohortChart) cohortChart.destroy();
+            cohortChart = new Chart(document.getElementById('cohortCompareChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Student Count',
+                        data: studentCounts,
+                        backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                        borderColor: 'rgb(139, 92, 246)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // 3. Pass rate chart
+            const passRates = comparisonData.map(c => c.pass_rate);
+            if (passChart) passChart.destroy();
+            passChart = new Chart(document.getElementById('passRateCompareChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Pass Rate (%)',
+                        data: passRates,
+                        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                        borderColor: 'rgb(16, 185, 129)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // 4. Status ratio (stacked bar chart: active vs graduated)
+            const activeCount = comparisonData.map(c => c.active);
+            const graduatedCount = comparisonData.map(c => c.graduated);
+            if (ratioChart) ratioChart.destroy();
+            ratioChart = new Chart(document.getElementById('statusRatioCompareChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Active',
+                            data: activeCount,
+                            backgroundColor: 'rgba(16, 185, 129, 0.5)'
+                        },
+                        {
+                            label: 'Graduated',
+                            data: graduatedCount,
+                            backgroundColor: 'rgba(107, 114, 128, 0.5)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { stacked: true, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function renderTable(comparisonData) {
+            const tbody = document.getElementById('comparisonTableBody');
+            tbody.innerHTML = '';
+
+            comparisonData.forEach(c => {
+                const total = c.students;
+                const active = c.active;
+                const ratio = total > 0 ? ((active / total) * 100).toFixed(1) + '%' : '0.0%';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-weight:700;">${escapeHtml(c.code)}</td>
+                    <td>${escapeHtml(c.name)}</td>
+                    <td>${c.students}</td>
+                    <td>
+                        <span class="gpa-badge ${c.avg_gpa >= 8.5 ? 'gpa-excellent' : (c.avg_gpa >= 7.5 ? 'gpa-good' : 'gpa-average')}">
+                            ${c.avg_gpa.toFixed(2)}
+                        </span>
+                    </td>
+                    <td>${ratio} (${active} Active)</td>
+                    <td>${c.pass_rate.toFixed(1)}%</td>
+                    <td style="font-weight:600; color:var(--primary);">${escapeHtml(c.top_performer)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            triggerComparisonUpdate();
+        });
+
+        // Toast handler
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const icon = type === 'success' ? 'check_circle' : 'error';
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span class="material-icons-round">${icon}</span>
+                <div class="toast-content">${escapeHtml(message)}</div>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

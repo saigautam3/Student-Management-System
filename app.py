@@ -1578,6 +1578,792 @@ def change_password():
     return redirect(url_for('settings_page'))
 
 # ==========================================
+# ENTERPRISE ACADEMIC PLANNERS (CALENDAR)
+# ==========================================
+@app.route("/calendar")
+@login_required
+def calendar_dashboard():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    
+    cur.execute("""
+        SELECT id, title, description, event_type, start_date, end_date, color_code
+        FROM academic_events
+        WHERE start_date >= CURRENT_DATE
+        ORDER BY start_date ASC LIMIT 10
+    """)
+    upcoming_events = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template("calendar.html", departments=departments, upcoming_events=upcoming_events)
+
+@app.route("/api/calendar/events")
+@login_required
+def api_get_calendar_events():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT e.id, e.title, e.description, e.event_type, e.start_date, e.end_date, e.color_code, u.username
+        FROM academic_events e
+        LEFT JOIN users u ON e.faculty_id = u.id
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    events = []
+    for r in rows:
+        events.append({
+            'id': r[0],
+            'title': r[1],
+            'description': r[2] or '',
+            'type': r[3],
+            'start': r[4].isoformat(),
+            'end': r[5].isoformat(),
+            'color': r[6],
+            'author': r[7] or 'System'
+        })
+    return jsonify({'status': 'success', 'events': events})
+
+@app.route("/api/calendar/events/add", methods=["POST"])
+@login_required
+def api_add_calendar_event():
+    user_role = session['user']['role']
+    faculty_id = session['user']['id']
+    username = session['user']['username']
+    
+    data = request.json if request.is_json else request.form
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+    event_type = data.get("event_type", "Meeting")
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    color_code = data.get("color_code", "#3b82f6")
+
+    if user_role not in ['Admin', 'HOD'] and event_type in ['Exam', 'Holiday']:
+        return jsonify({'status': 'error', 'message': 'Only HOD or Admin can create Exam/Holiday events.'}), 403
+
+    if not title or not start_date or not end_date:
+        return jsonify({'status': 'error', 'message': 'Title, start date, and end date are required.'}), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO academic_events (title, description, event_type, start_date, end_date, color_code, faculty_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id;
+        """, (title, description, event_type, start_date, end_date, color_code, faculty_id))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        
+        log_activity("Academic Event Created", f"Event: {title}", username)
+        
+        if event_type in ['Exam', 'Holiday']:
+            cur.execute("SELECT id FROM users")
+            all_uids = [row[0] for row in cur.fetchall()]
+            for uid in all_uids:
+                create_notification(uid, 'System Alert', f"New Academic Event: {title} scheduled.")
+                
+        return jsonify({'status': 'success', 'message': 'Event created successfully!', 'event_id': new_id})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/api/calendar/events/edit/<int:id>", methods=["POST"])
+@login_required
+def api_edit_calendar_event(id):
+    user_role = session['user']['role']
+    faculty_id = session['user']['id']
+    username = session['user']['username']
+    
+    data = request.json if request.is_json else request.form
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+    event_type = data.get("event_type", "Meeting")
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    color_code = data.get("color_code", "#3b82f6")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT faculty_id FROM academic_events WHERE id = %s", (id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Event not found.'}), 404
+        
+    creator_id = row[0]
+    if creator_id != faculty_id and user_role != 'Admin':
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'You do not have permission to modify this event.'}), 403
+
+    try:
+        cur.execute("""
+            UPDATE academic_events
+            SET title = %s, description = %s, event_type = %s, start_date = %s, end_date = %s, color_code = %s
+            WHERE id = %s
+        """, (title, description, event_type, start_date, end_date, color_code, id))
+        conn.commit()
+        log_activity("Academic Event Modified", f"Event ID: {id}", username)
+        return jsonify({'status': 'success', 'message': 'Event modified successfully!'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/api/calendar/events/delete/<int:id>", methods=["POST"])
+@login_required
+def api_delete_calendar_event(id):
+    user_role = session['user']['role']
+    faculty_id = session['user']['id']
+    username = session['user']['username']
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT faculty_id FROM academic_events WHERE id = %s", (id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Event not found.'}), 404
+        
+    creator_id = row[0]
+    if creator_id != faculty_id and user_role != 'Admin':
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Permission denied.'}), 403
+
+    try:
+        cur.execute("DELETE FROM academic_events WHERE id = %s", (id,))
+        conn.commit()
+        log_activity("Academic Event Deleted", f"Event ID: {id}", username)
+        return jsonify({'status': 'success', 'message': 'Event deleted successfully.'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================
+# BULK STUDENT IMPORT (EXCEL / CSV)
+# ==========================================
+@app.route("/api/students/import", methods=["POST"])
+@login_required
+def api_import_students():
+    import csv
+    import io
+    import openpyxl
+    
+    user_role = session['user']['role']
+    faculty_id = session['user']['id']
+    username = session['user']['username']
+    
+    if user_role not in ['Admin', 'HOD']:
+        return jsonify({'status': 'error', 'message': 'Access denied. Privileged role required.'}), 403
+        
+    if 'file' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No file uploaded.'}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'status': 'error', 'message': 'Empty file selected.'}), 400
+        
+    filename = secure_filename(file.filename)
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    
+    if ext not in ['csv', 'xlsx']:
+        return jsonify({'status': 'error', 'message': 'Unsupported file format. Please upload CSV or Excel (.xlsx).'}), 400
+        
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT email FROM students")
+    existing_emails = {row[0].lower() for row in cur.fetchall() if row[0]}
+    
+    cur.execute("SELECT id, code FROM departments")
+    dept_map = {row[1].upper(): row[0] for row in cur.fetchall()}
+    
+    imported_count = 0
+    skipped_count = 0
+    failed_count = 0
+    errors_list = []
+    
+    try:
+        cur.execute("""
+            INSERT INTO student_imports (filename, faculty_id)
+            VALUES (%s, %s) RETURNING id;
+        """, (filename, faculty_id))
+        import_id = cur.fetchone()[0]
+    except Exception as e:
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Failed to initialize import: {str(e)}'}), 500
+
+    rows_to_process = []
+    try:
+        if ext == 'csv':
+            stream = io.StringIO(file.stream.read().decode("utf-8"), newline=None)
+            csv_reader = csv.reader(stream)
+            header = next(csv_reader, None)
+            for idx, row in enumerate(csv_reader, 2):
+                if len(row) >= 6:
+                    rows_to_process.append((idx, row[0], row[1], row[2], row[3], row[4], row[5]))
+        else:
+            wb = openpyxl.load_workbook(file.stream)
+            ws = wb.active
+            header = [cell.value for cell in ws[1]]
+            for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+                if any(row):
+                    row_data = [str(x).strip() if x is not None else '' for x in row]
+                    if len(row_data) >= 6:
+                        rows_to_process.append((idx, row_data[0], row_data[1], row_data[2], row_data[3], row_data[4], row_data[5]))
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Failed to read import file structure: {str(e)}'}), 400
+
+    seen_emails_in_batch = set()
+
+    for row_num, name, age_str, dept_code, email, gpa_str, status in rows_to_process:
+        name = name.strip()
+        dept_code = dept_code.strip().upper()
+        email = email.strip().lower()
+        status = status.strip().title()
+        
+        if not name or not email:
+            failed_count += 1
+            reason = "Missing name or email"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+            
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            failed_count += 1
+            reason = "Invalid email format"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+
+        try:
+            age = int(age_str)
+            if age <= 0:
+                raise ValueError()
+        except ValueError:
+            failed_count += 1
+            reason = "Invalid age (must be positive integer)"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+
+        try:
+            gpa = float(gpa_str)
+            if gpa < 0.00 or gpa > 10.00:
+                raise ValueError()
+        except ValueError:
+            failed_count += 1
+            reason = "Invalid GPA (must be numeric 0.00 to 10.00)"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+
+        if status not in ['Active', 'Inactive', 'Graduated']:
+            failed_count += 1
+            reason = "Invalid Status (must be Active, Inactive, or Graduated)"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+
+        if dept_code not in dept_map:
+            failed_count += 1
+            reason = f"Department code '{dept_code}' not found"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+            continue
+
+        if email in existing_emails or email in seen_emails_in_batch:
+            skipped_count += 1
+            reason = "Duplicate record skipped (Email already exists)"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Skipped'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Skipped'))
+            continue
+
+        try:
+            dept_id = dept_map[dept_code]
+            cur.execute("""
+                INSERT INTO students (name, age, department_id, email, gpa, status)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id;
+            """, (name, age, dept_id, email, gpa, status))
+            sid = cur.fetchone()[0]
+            
+            cur.execute("INSERT INTO student_marks (student_id, gpa) VALUES (%s, %s)", (sid, gpa))
+            
+            imported_count += 1
+            seen_emails_in_batch.add(email)
+        except Exception as insert_err:
+            failed_count += 1
+            reason = f"Database insertion error: {str(insert_err)}"
+            errors_list.append({'row': row_num, 'name': name, 'email': email, 'reason': reason, 'status': 'Failed'})
+            cur.execute("INSERT INTO student_import_errors (import_id, row_number, student_name, email, reason, status) VALUES (%s,%s,%s,%s,%s,%s)", (import_id, row_num, name, email, reason, 'Failed'))
+
+    try:
+        cur.execute("""
+            UPDATE student_imports
+            SET imported_count = %s, skipped_count = %s, failed_count = %s
+            WHERE id = %s
+        """, (imported_count, skipped_count, failed_count, import_id))
+        conn.commit()
+        log_activity("Bulk Import Executed", f"Import ID: {import_id}. Imported: {imported_count}, Skipped: {skipped_count}, Failed: {failed_count}", username)
+    except Exception as summary_err:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': f'Failed to complete import summary: {str(summary_err)}'}), 500
+
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'status': 'success',
+        'imported': imported_count,
+        'skipped': skipped_count,
+        'failed': failed_count,
+        'errors': errors_list
+    })
+
+
+# ==========================================
+# ATTENDANCE MANAGEMENT MODULE
+# ==========================================
+@app.route("/attendance")
+@login_required
+def attendance_dashboard():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT id, name, code FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    
+    cur.execute("""
+        SELECT s.id, s.name, d.name, s.email, d.id
+        FROM students s
+        LEFT JOIN departments d ON s.department_id = d.id
+        WHERE s.status = 'Active'
+        ORDER BY s.name
+    """)
+    students_list = cur.fetchall()
+    
+    cur.execute("""
+        SELECT s.id, d.name, s.session_date, s.lecture_topic, u.username,
+               COUNT(r.id) AS total_marked,
+               COUNT(CASE WHEN r.status = 'Present' THEN 1 END) AS present_count
+        FROM attendance_sessions s
+        LEFT JOIN departments d ON s.department_id = d.id
+        LEFT JOIN users u ON s.faculty_id = u.id
+        LEFT JOIN attendance_records r ON r.session_id = s.id
+        GROUP BY s.id, d.name, s.session_date, s.lecture_topic, u.username
+        ORDER BY s.session_date DESC, s.created_at DESC LIMIT 20
+    """)
+    recent_sessions = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template("attendance.html", departments=departments, students_list=students_list, recent_sessions=recent_sessions)
+
+@app.route("/api/attendance/session/create", methods=["POST"])
+@login_required
+def api_create_attendance_session():
+    username = session['user']['username']
+    faculty_id = session['user']['id']
+    
+    data = request.json if request.is_json else request.form
+    dept_id = int(data.get("department_id"))
+    session_date = data.get("session_date")
+    lecture_topic = data.get("lecture_topic", "").strip()
+
+    if not dept_id or not session_date or not lecture_topic:
+        return jsonify({'status': 'error', 'message': 'Department, date, and lecture topic are required.'}), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO attendance_sessions (department_id, session_date, lecture_topic, faculty_id)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (department_id, session_date, lecture_topic) 
+            DO UPDATE SET lecture_topic = EXCLUDED.lecture_topic
+            RETURNING id;
+        """, (dept_id, session_date, lecture_topic, faculty_id))
+        session_id = cur.fetchone()[0]
+        conn.commit()
+        return jsonify({'status': 'success', 'session_id': session_id})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/api/attendance/session/save", methods=["POST"])
+@login_required
+def api_save_attendance():
+    username = session['user']['username']
+    
+    data = request.json
+    session_id = int(data.get("session_id"))
+    records = data.get("records", [])
+
+    if not session_id or not records:
+        return jsonify({'status': 'error', 'message': 'Invalid session parameters.'}), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        for r in records:
+            sid = int(r.get("student_id"))
+            stat = r.get("status")
+            cur.execute("""
+                INSERT INTO attendance_records (session_id, student_id, status)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (session_id, student_id)
+                DO UPDATE SET status = EXCLUDED.status;
+            """, (session_id, sid, stat))
+        conn.commit()
+        log_activity("Attendance Marked", f"Session ID: {session_id}. Marked: {len(records)} records.", username)
+        return jsonify({'status': 'success', 'message': 'Attendance saved successfully!'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/api/attendance/defaulters")
+@login_required
+def api_attendance_defaulters():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        WITH total_sessions AS (
+            SELECT department_id, COUNT(id) AS total_count
+            FROM attendance_sessions
+            GROUP BY department_id
+        ),
+        student_presents AS (
+            SELECT r.student_id, COUNT(r.id) AS present_count
+            FROM attendance_records r
+            WHERE r.status = 'Present'
+            GROUP BY r.student_id
+        )
+        SELECT s.id, s.name, d.name AS dept_name, s.email, 
+               COALESCE(ts.total_count, 0) AS total_classes, 
+               COALESCE(sp.present_count, 0) AS attended_classes,
+               ROUND(
+                   CASE WHEN COALESCE(ts.total_count, 0) = 0 THEN 100.00
+                   ELSE (COALESCE(sp.present_count, 0) * 100.00) / ts.total_count END,
+               2) AS percentage
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        LEFT JOIN total_sessions ts ON ts.department_id = s.department_id
+        LEFT JOIN student_presents sp ON sp.student_id = s.id
+        WHERE s.status = 'Active'
+        GROUP BY s.id, s.name, d.name, s.email, ts.total_count, sp.present_count
+        HAVING (
+            CASE WHEN COALESCE(ts.total_count, 0) = 0 THEN 100.00
+            ELSE (COALESCE(sp.present_count, 0) * 100.00) / ts.total_count END
+        ) < 75.00
+        ORDER BY percentage ASC;
+    """)
+    defaulters = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    res = []
+    for r in defaulters:
+        res.append({
+            'id': r[0],
+            'name': r[1],
+            'department': r[2],
+            'email': r[3],
+            'total': r[4],
+            'present': r[5],
+            'percentage': float(r[6])
+        })
+    return jsonify({'status': 'success', 'defaulters': res})
+
+@app.route("/api/attendance/stats")
+@login_required
+def api_attendance_stats():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT COUNT(id), COUNT(CASE WHEN status='Present' THEN 1 END)
+        FROM attendance_records
+    """)
+    row = cur.fetchone()
+    total_recs = row[0] or 0
+    present_recs = row[1] or 0
+    overall_pct = round((present_recs * 100.00 / total_recs), 2) if total_recs > 0 else 100.00
+    
+    cur.execute("""
+        SELECT d.name, COUNT(r.id), COUNT(CASE WHEN r.status='Present' THEN 1 END)
+        FROM departments d
+        JOIN students s ON s.department_id = d.id
+        JOIN attendance_records r ON r.student_id = s.id
+        GROUP BY d.id, d.name
+    """)
+    dept_stats = []
+    for name, tot, pres in cur.fetchall():
+        pct = round((pres * 100.00 / tot), 2) if tot > 0 else 100.00
+        dept_stats.append({'department': name, 'percentage': float(pct)})
+        
+    cur.execute("""
+        SELECT TO_CHAR(s.session_date, 'YYYY-MM') as month, COUNT(r.id), COUNT(CASE WHEN r.status='Present' THEN 1 END)
+        FROM attendance_sessions s
+        JOIN attendance_records r ON r.session_id = s.id
+        GROUP BY month
+        ORDER BY month
+    """)
+    months = []
+    pcts = []
+    for month, tot, pres in cur.fetchall():
+        pct = round((pres * 100.00 / tot), 2) if tot > 0 else 100.00
+        months.append(month)
+        pcts.append(float(pct))
+        
+    cur.close()
+    conn.close()
+    return jsonify({
+        'status': 'success',
+        'overall': float(overall_pct),
+        'departments': dept_stats,
+        'trends': {
+            'months': months,
+            'percentages': pcts
+        }
+    })
+
+
+# ==========================================
+# MARKS & GPA MANAGEMENT MODULE
+# ==========================================
+@app.route("/marks")
+@login_required
+def marks_dashboard():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT s.id, s.name, d.name, s.email,
+               COALESCE(m.internal_marks, 0.00),
+               COALESCE(m.lab_marks, 0.00),
+               COALESCE(m.mid_marks, 0.00),
+               COALESCE(m.final_marks, 0.00),
+               COALESCE(m.total_marks, 0.00),
+               COALESCE(m.percentage, 0.00),
+               COALESCE(m.gpa, 0.00)
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        LEFT JOIN student_marks m ON m.student_id = s.id
+        ORDER BY s.name
+    """)
+    marks_list = cur.fetchall()
+    
+    cur.execute("SELECT COUNT(*) FROM students")
+    total_students = cur.fetchone()[0]
+    
+    cur.execute("""
+        SELECT COUNT(*) FROM student_marks WHERE gpa >= 5.00
+    """)
+    passed_students = cur.fetchone()[0]
+    
+    pass_percentage = round((passed_students * 100.00 / total_students), 2) if total_students > 0 else 0.00
+    
+    cur.execute("""
+        SELECT s.name, COALESCE(m.gpa, 0.00)
+        FROM students s
+        JOIN student_marks m ON m.student_id = s.id
+        ORDER BY m.gpa DESC, s.name LIMIT 5
+    """)
+    top_performers = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template("marks.html", marks_list=marks_list, pass_percentage=pass_percentage, top_performers=top_performers, total_students=total_students)
+
+@app.route("/api/marks/save", methods=["POST"])
+@login_required
+def api_save_marks():
+    username = session['user']['username']
+    
+    data = request.json if request.is_json else request.form
+    student_id = int(data.get("student_id"))
+    internal = float(data.get("internal_marks", 0.00))
+    lab = float(data.get("lab_marks", 0.00))
+    mid = float(data.get("mid_marks", 0.00))
+    final = float(data.get("final_marks", 0.00))
+
+    if not (0.00 <= internal <= 20.00) or not (0.00 <= lab <= 20.00) or not (0.00 <= mid <= 30.00) or not (0.00 <= final <= 100.00):
+        return jsonify({'status': 'error', 'message': 'Marks values exceed maximum allowed bounds.'}), 400
+
+    total = internal + lab + mid + final
+    percentage = round((total / 170.00) * 100.00, 2)
+    gpa = round(percentage / 10.00, 2)
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO student_marks (student_id, internal_marks, lab_marks, mid_marks, final_marks, total_marks, percentage, gpa)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (student_id)
+            DO UPDATE SET 
+                internal_marks = EXCLUDED.internal_marks,
+                lab_marks = EXCLUDED.lab_marks,
+                mid_marks = EXCLUDED.mid_marks,
+                final_marks = EXCLUDED.final_marks,
+                total_marks = EXCLUDED.total_marks,
+                percentage = EXCLUDED.percentage,
+                gpa = EXCLUDED.gpa,
+                updated_at = CURRENT_TIMESTAMP;
+        """, (student_id, internal, lab, mid, final, total, percentage, gpa))
+        
+        cur.execute("""
+            UPDATE students
+            SET gpa = %s
+            WHERE id = %s
+        """, (gpa, student_id))
+        
+        conn.commit()
+        log_activity("Marks Updated", f"Student ID: {student_id}. GPA: {gpa}", username)
+        
+        if gpa < 6.0:
+            create_notification(session['user']['id'], 'Academic Alert', f"Student ID {student_id} is flagged at High Risk (GPA: {gpa})")
+            
+        return jsonify({
+            'status': 'success',
+            'message': 'Marks updated successfully!',
+            'calculated': {
+                'total': total,
+                'percentage': percentage,
+                'gpa': gpa
+            }
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================
+# DEPARTMENT COMPARISON MODULE
+# ==========================================
+@app.route("/department-comparison")
+@login_required
+def department_comparison_dashboard():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, code FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("department_comparison.html", departments=departments)
+
+@app.route("/api/departments/compare")
+@login_required
+def api_compare_departments():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    ids_param = request.args.get("ids", "")
+    if not ids_param:
+        cur.execute("SELECT id FROM departments")
+        dept_ids = [row[0] for row in cur.fetchall()]
+    else:
+        try:
+            dept_ids = [int(x) for x in ids_param.split(",")]
+        except ValueError:
+            cur.close()
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Invalid department selections.'}), 400
+
+    if not dept_ids:
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'success', 'comparison': []})
+
+    placeholders = ",".join(["%s"] * len(dept_ids))
+    query = f"""
+        SELECT 
+            d.id, 
+            d.name, 
+            d.code,
+            COUNT(s.id) AS student_count,
+            ROUND(COALESCE(AVG(s.gpa), 0.00), 2) AS avg_gpa,
+            COUNT(CASE WHEN s.status = 'Active' THEN 1 END) AS active_count,
+            COUNT(CASE WHEN s.status = 'Graduated' THEN 1 END) AS graduated_count,
+            COUNT(CASE WHEN s.gpa >= 5.00 THEN 1 END) AS passed_count
+        FROM departments d
+        LEFT JOIN students s ON s.department_id = d.id
+        WHERE d.id IN ({placeholders})
+        GROUP BY d.id, d.name, d.code
+        ORDER BY avg_gpa DESC
+    """
+    
+    cur.execute(query, tuple(dept_ids))
+    results = cur.fetchall()
+    
+    comparison = []
+    for row in results:
+        did = row[0]
+        total_students = row[3]
+        passed_students = row[7]
+        pass_rate = round((passed_students * 100.00 / total_students), 2) if total_students > 0 else 0.00
+        
+        cur.execute("""
+            SELECT name, gpa FROM students 
+            WHERE department_id = %s AND status = 'Active'
+            ORDER BY gpa DESC, name LIMIT 1
+        """, (did,))
+        top_row = cur.fetchone()
+        top_perf = f"{top_row[0]} ({top_row[1]})" if top_row else "N/A"
+        
+        comparison.append({
+            'id': row[0],
+            'name': row[1],
+            'code': row[2],
+            'students': total_students,
+            'avg_gpa': float(row[4]),
+            'active': row[5],
+            'graduated': row[6],
+            'pass_rate': float(pass_rate),
+            'top_performer': top_perf
+        })
+        
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success', 'comparison': comparison})
+
+
+# ==========================================
 # SECURITY UTILITIES
 # ==========================================
 def is_secure_password(password):

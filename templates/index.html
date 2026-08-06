@@ -69,6 +69,22 @@
                     <span class="material-icons-round">campaign</span>
                     <span>Announcements</span>
                 </a>
+                <a href="/calendar" class="menu-item" id="menu-calendar">
+                    <span class="material-icons-round">calendar_month</span>
+                    <span>Academic Calendar</span>
+                </a>
+                <a href="/attendance" class="menu-item" id="menu-attendance">
+                    <span class="material-icons-round">co_present</span>
+                    <span>Attendance</span>
+                </a>
+                <a href="/marks" class="menu-item" id="menu-marks">
+                    <span class="material-icons-round">grade</span>
+                    <span>Academic Marks</span>
+                </a>
+                <a href="/department-comparison" class="menu-item" id="menu-comparison">
+                    <span class="material-icons-round">compare_arrows</span>
+                    <span>Dept Comparison</span>
+                </a>
                 {% if session['user']['role'] == 'Admin' %}
                 <a href="/faculty" class="menu-item" id="menu-faculty">
                     <span class="material-icons-round">badge</span>
@@ -388,6 +404,37 @@
                     </div>
                 </section>
 
+                <!-- Academic Calendar Widgets -->
+                <section class="analytics-grid" style="grid-template-columns: 1fr 1fr; margin-top: -10px;">
+                    <!-- Today's Schedule -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--primary)">today</span>
+                                <span>Today's Schedule</span>
+                            </h3>
+                            <a href="/calendar" style="font-size:12px; font-weight:600; color:var(--primary); text-decoration:none;">Go to Planner</a>
+                        </div>
+                        <div id="todayScheduleList" style="display:flex; flex-direction:column; gap:10px; max-height:280px; overflow-y:auto; padding-right:5px;">
+                            <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">Loading today's events...</div>
+                        </div>
+                    </div>
+
+                    <!-- Upcoming Events Widget -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--primary)">event_note</span>
+                                <span>Upcoming Academic Events</span>
+                            </h3>
+                            <a href="/calendar" style="font-size:12px; font-weight:600; color:var(--primary); text-decoration:none;">View All</a>
+                        </div>
+                        <div id="upcomingEventsList" style="display:flex; flex-direction:column; gap:10px; max-height:280px; overflow-y:auto; padding-right:5px;">
+                            <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">Loading upcoming events...</div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Charts Analytics Grid -->
                 <section class="analytics-grid">
                     <div class="analytics-card">
@@ -558,6 +605,14 @@
                                     <button onclick="window.location.href='/reports'"><span class="material-icons-round">print</span> Professional Report</button>
                                 </div>
                             </div>
+
+                            <!-- Bulk Import Button (Admin/HOD only) -->
+                            {% if session['user']['role'] in ['Admin', 'HOD'] %}
+                            <button class="secondary-btn" id="openImportModalBtn" type="button" style="margin-right:8px;">
+                                <span class="material-icons-round">upload_file</span>
+                                <span>Bulk Import</span>
+                            </button>
+                            {% endif %}
 
                             <!-- Add Student Button -->
                             <button class="primary-btn" id="openAddModalBtn">
@@ -767,6 +822,68 @@
             <div class="modal-actions" style="justify-content: center; gap: 15px; margin-top:25px; padding:0;">
                 <button type="button" class="secondary-btn" onclick="closeConfirmDeleteModal()" style="min-width: 100px;">Cancel</button>
                 <a id="confirmDeleteLink" href="#" class="primary-btn" style="background: var(--danger); min-width: 100px; text-decoration:none; text-align:center;">Delete</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================
+            Bulk Import Modal
+    =========================== -->
+    <div class="modal-overlay" id="bulkImportModal" style="z-index: 2050;">
+        <div class="modal-card" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3>📤 Bulk Import Students</h3>
+                <button class="close-modal-btn" id="closeImportModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px;">
+                <p class="subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+                    Upload a CSV or Excel (.xlsx) file containing student records. The file must contain headers in the following order: <br>
+                    <strong>Name, Age, Department Code, Email, GPA, Status</strong>.
+                </p>
+                
+                <form id="bulkImportForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="form-group">
+                        <label for="importFile">Choose CSV or Excel File</label>
+                        <input type="file" id="importFile" name="file" accept=".csv, .xlsx" required class="file-input-custom">
+                    </div>
+                    
+                    <!-- Progress / Uploading Indicator -->
+                    <div id="importProgress" style="display:none; text-align:center; padding:15px;">
+                        <span class="material-icons-round style-spin" style="font-size:32px; color:var(--primary); animation: spin 1s linear infinite;">sync</span>
+                        <p style="margin-top:8px; font-size:12px;">Validating and importing records, please wait...</p>
+                    </div>
+
+                    <!-- Summary Results Panel -->
+                    <div id="importSummaryPanel" style="display:none; background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px;">
+                        <h4 style="font-size:14px; font-weight:700; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+                            <span class="material-icons-round" style="color:var(--primary)">assessment</span>
+                            <span>Import Summary</span>
+                        </h4>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center;">
+                            <div style="background: rgba(16, 185, 129, 0.1); padding:10px; border-radius:var(--radius-sm);">
+                                <h2 id="summaryImported" style="color:var(--success); font-size:24px; font-weight:700;">0</h2>
+                                <span style="font-size:11px; color:var(--text-muted);">Imported</span>
+                            </div>
+                            <div style="background: rgba(245, 158, 11, 0.1); padding:10px; border-radius:var(--radius-sm);">
+                                <h2 id="summarySkipped" style="color:var(--warning); font-size:24px; font-weight:700;">0</h2>
+                                <span style="font-size:11px; color:var(--text-muted);">Skipped</span>
+                            </div>
+                            <div style="background: rgba(239, 68, 68, 0.1); padding:10px; border-radius:var(--radius-sm);">
+                                <h2 id="summaryFailed" style="color:var(--danger); font-size:24px; font-weight:700;">0</h2>
+                                <span style="font-size:11px; color:var(--text-muted);">Failed</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Logs of errors/skips -->
+                        <div id="importErrorsList" style="margin-top:15px; max-height:150px; overflow-y:auto; font-size:11px; border-top:1px solid var(--border-color); padding-top:10px; display:flex; flex-direction:column; gap:5px; color:var(--text-muted);">
+                        </div>
+                    </div>
+
+                    <div class="modal-actions" style="margin-top:10px; padding:0;">
+                        <button type="button" class="secondary-btn" id="cancelImportBtn">Cancel</button>
+                        <button type="submit" class="primary-btn" id="submitImportBtn">Start Import</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -1115,11 +1232,179 @@
                 });
             }
 
+            // ==========================================
+            // BULK IMPORT MODAL INTERACTIVE LOGIC
+            // ==========================================
+            const openImportBtn = document.getElementById('openImportModalBtn');
+            const closeImportBtn = document.getElementById('closeImportModalBtn');
+            const cancelImportBtn = document.getElementById('cancelImportBtn');
+            const importModal = document.getElementById('bulkImportModal');
+            const importForm = document.getElementById('bulkImportForm');
+            const importProgress = document.getElementById('importProgress');
+            const importSummaryPanel = document.getElementById('importSummaryPanel');
+            const importErrorsList = document.getElementById('importErrorsList');
+
+            if (openImportBtn && importModal) {
+                openImportBtn.addEventListener('click', () => {
+                    importForm.reset();
+                    importProgress.style.display = 'none';
+                    importSummaryPanel.style.display = 'none';
+                    importErrorsList.innerHTML = '';
+                    importModal.classList.add('active');
+                });
+            }
+
+            function closeImportModal() {
+                if (importModal) importModal.classList.remove('active');
+            }
+
+            if (closeImportBtn) closeImportBtn.addEventListener('click', closeImportModal);
+            if (cancelImportBtn) cancelImportBtn.addEventListener('click', closeImportModal);
+
+            if (importForm) {
+                importForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    importProgress.style.display = 'block';
+                    importSummaryPanel.style.display = 'none';
+                    importErrorsList.innerHTML = '';
+
+                    const formData = new FormData(importForm);
+                    fetch('/api/students/import', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        importProgress.style.display = 'none';
+                        if (data.status === 'success') {
+                            showToast('Import completed!', 'success');
+                            importSummaryPanel.style.display = 'block';
+                            document.getElementById('summaryImported').textContent = data.imported;
+                            document.getElementById('summarySkipped').textContent = data.skipped;
+                            document.getElementById('summaryFailed').textContent = data.failed;
+
+                            if (data.errors && data.errors.length > 0) {
+                                let errHtml = '<strong>Issues Log:</strong>';
+                                data.errors.forEach(err => {
+                                    const badgeClass = err.status === 'Failed' ? 'var(--danger)' : 'var(--warning)';
+                                    errHtml += `
+                                        <div style="margin-top:4px; padding:4px 8px; background:rgba(0,0,0,0.01); border-radius:3px;">
+                                            Row ${err.row}: <span style="font-weight:700;">${escapeHtml(err.name)}</span> (${escapeHtml(err.email)}) - 
+                                            <span style="color:${badgeClass}; font-weight:700;">${err.status}</span>: ${escapeHtml(err.reason)}
+                                        </div>
+                                    `;
+                                });
+                                importErrorsList.innerHTML = errHtml;
+                            } else {
+                                importErrorsList.innerHTML = '<div style="color:var(--success); text-align:center; padding:10px;">All records imported successfully with zero errors!</div>';
+                            }
+                            
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                        } else {
+                            showToast(data.message || 'Import failed.', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error importing:', error);
+                        importProgress.style.display = 'none';
+                        showToast('Connection error. Failed to upload file.', 'danger');
+                    });
+                });
+            }
+
+            // ==========================================
+            // CALENDAR PLANNERS DYNAMIC HOME WIDGETS
+            // ==========================================
+            function loadCalendarDashboardWidgets() {
+                const todayList = document.getElementById('todayScheduleList');
+                const upcomingList = document.getElementById('upcomingEventsList');
+
+                fetch('/api/calendar/events')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            const now = new Date();
+                            const todayStr = now.toISOString().split('T')[0];
+                            
+                            const todayEvents = [];
+                            const futureEvents = [];
+
+                            data.events.forEach(evt => {
+                                const start = new Date(evt.start);
+                                const end = new Date(evt.end);
+                                const startDateStr = evt.start.split('T')[0];
+                                const endDateStr = evt.end.split('T')[0];
+                                
+                                if (todayStr >= startDateStr && todayStr <= endDateStr) {
+                                    todayEvents.push(evt);
+                                }
+                                
+                                if (start > now) {
+                                    futureEvents.push(evt);
+                                }
+                            });
+
+                            if (todayEvents.length === 0) {
+                                todayList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No sessions or events scheduled for today.</div>`;
+                            } else {
+                                let todayHtml = '';
+                                todayEvents.forEach(evt => {
+                                    todayHtml += `
+                                        <div style="padding:10px 15px; border-radius:var(--radius-sm); background:rgba(0,0,0,0.015); border:1px solid var(--border-color); border-left:4px solid ${evt.color};">
+                                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                                <strong style="font-size:13px; color:var(--text-main);">${escapeHtml(evt.title)}</strong>
+                                                <span class="status-badge" style="font-size:8px; padding:2px 6px; background:rgba(0,0,0,0.05); color:var(--text-main);">${evt.type}</span>
+                                            </div>
+                                            <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">Time: ${formatTime(evt.start)} - ${formatTime(evt.end)}</p>
+                                        </div>
+                                    `;
+                                });
+                                todayList.innerHTML = todayHtml;
+                            }
+
+                            if (futureEvents.length === 0) {
+                                upcomingList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No upcoming academic events.</div>`;
+                            } else {
+                                futureEvents.sort((a,b) => new Date(a.start) - new Date(b.start));
+                                let upcomingHtml = '';
+                                futureEvents.slice(0, 5).forEach(evt => {
+                                    upcomingHtml += `
+                                        <div style="padding:10px 15px; border-radius:var(--radius-sm); background:rgba(0,0,0,0.015); border:1px solid var(--border-color); border-left:4px solid ${evt.color};">
+                                            <strong style="font-size:13px; color:var(--text-main);">${escapeHtml(evt.title)}</strong>
+                                            <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">Date: ${formatDate(evt.start)} | Type: ${evt.type}</p>
+                                            <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">${escapeHtml(evt.description || 'No description.')}</p>
+                                        </div>
+                                    `;
+                                });
+                                upcomingList.innerHTML = upcomingHtml;
+                            }
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error loading calendar widgets:', err);
+                        todayList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger); font-size:12px;">Failed to load schedule.</div>`;
+                        upcomingList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger); font-size:12px;">Failed to load events.</div>`;
+                    });
+            }
+
+            function formatTime(isoStr) {
+                const date = new Date(isoStr);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            function formatDate(isoStr) {
+                const date = new Date(isoStr);
+                return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+
+            loadCalendarDashboardWidgets();
+
             // Check if drawer should be opened by query param
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('show_announcements') === 'true') {
                 openAnnouncementsDrawer();
-                // Clean URL query param without reloading page
                 const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + window.location.hash;
                 window.history.pushState({path:newUrl}, '', newUrl);
             }

@@ -71,6 +71,22 @@
                     <span class="material-icons-round">campaign</span>
                     <span>Announcements</span>
                 </a>
+                <a href="/calendar" class="menu-item" id="menu-calendar">
+                    <span class="material-icons-round">calendar_month</span>
+                    <span>Academic Calendar</span>
+                </a>
+                <a href="/attendance" class="menu-item" id="menu-attendance">
+                    <span class="material-icons-round">co_present</span>
+                    <span>Attendance</span>
+                </a>
+                <a href="/marks" class="menu-item" id="menu-marks">
+                    <span class="material-icons-round">grade</span>
+                    <span>Academic Marks</span>
+                </a>
+                <a href="/department-comparison" class="menu-item" id="menu-comparison">
+                    <span class="material-icons-round">compare_arrows</span>
+                    <span>Dept Comparison</span>
+                </a>
                 {% if session['user']['role'] == 'Admin' %}
                 <a href="/faculty" class="menu-item active" id="menu-faculty">
                     <span class="material-icons-round">badge</span>

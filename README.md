@@ -27,12 +27,13 @@ StudentSphere is a modern, production-quality Academic ERP and analytics portal 
   - Export filtered rows directly to **Excel (`.xlsx`)** spreadsheets using SheetJS.
   - Compile the registry table into a **PDF** report document using `html2pdf.js`.
   - Print report layout stylesheets.
-- **F - Faculty Announcement Board**: Dedicated Announcements module. Faculty can publish, schedule, and categorize bulletins (Academic, Examination, Placement, Workshop, Holiday, Emergency, General) with priority highlights.
+- **F - Faculty Announcement Board & Interactive Drawer**: Dedicated Announcements module. Features a high-performance **interactive sliding drawer** (sliding window) that allows users to view, publish, and delete announcements asynchronously on the dashboard. Includes tabbed layouts for notice viewing and publishing, real-time dashboard widget updates, and cross-page redirection hooks.
 - **G - GPA Scale (0.00 to 10.00)**: Supports standard 10-point grading scales. GPAs are highlighted with color-coded badges based on performance:
   - `gpa-excellent` (Green badge): $\ge$ 8.50
   - `gpa-good` (Blue badge): 7.50 to 8.49
   - `gpa-average` (Orange badge): $<$ 7.50
 - **H - HTML5 & Backend Data Validation**: Validates all fields against duplicate email records, secure username parameters, and password complexity requirements.
+- **J - JSON API & Asynchronous CRUD**: Complete backend REST API integration (`/api/announcements`, `/api/announcements/add`, and `/api/announcements/delete/<id>`) that powers the sliding drawer, permitting real-time notice posting, list reloading, and deletion.
 - **I - Interactive Modals**: Slid-in overlay modal forms for adding/editing students and departments, and a custom confirmation modal replacing standard browser `confirm()` prompts.
 - **L - Live Database Syncing**: Fully backed by PostgreSQL to ensure immediate data updates and ACID transaction compliance.
 - **M - Multi-Criteria Filter Grid**: Dynamic filter toolbar allowing users to query records by Name, Department, Enrollment Status, Age, and GPA range simultaneously.

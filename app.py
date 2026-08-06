@@ -2034,6 +2034,25 @@ def api_save_attendance():
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # Check if lecture_topic or session_date is passed in request, and update session details if so
+        lecture_topic = data.get("lecture_topic")
+        session_date = data.get("session_date")
+        if lecture_topic or session_date:
+            update_fields = []
+            update_params = []
+            if lecture_topic:
+                update_fields.append("lecture_topic = %s")
+                update_params.append(lecture_topic.strip())
+            if session_date:
+                update_fields.append("session_date = %s")
+                update_params.append(session_date)
+            update_params.append(session_id)
+            cur.execute(f"""
+                UPDATE attendance_sessions 
+                SET {", ".join(update_fields)} 
+                WHERE id = %s
+            """, tuple(update_params))
+
         for r in records:
             sid = int(r.get("student_id"))
             stat = r.get("status")
@@ -2052,6 +2071,97 @@ def api_save_attendance():
     finally:
         cur.close()
         conn.close()
+
+@app.route("/api/attendance/sessions")
+@login_required
+def api_get_attendance_sessions():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT s.id, d.name, s.session_date, s.lecture_topic, u.username,
+               COUNT(r.id) AS total_marked,
+               COUNT(CASE WHEN r.status = 'Present' THEN 1 END) AS present_count
+        FROM attendance_sessions s
+        LEFT JOIN departments d ON s.department_id = d.id
+        LEFT JOIN users u ON s.faculty_id = u.id
+        LEFT JOIN attendance_records r ON r.session_id = s.id
+        GROUP BY s.id, d.name, s.session_date, s.lecture_topic, u.username
+        ORDER BY s.session_date DESC, s.created_at DESC
+    """)
+    sessions = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    res = []
+    for r in sessions:
+        res.append({
+            'id': r[0],
+            'department_name': r[1],
+            'session_date': r[2].isoformat() if r[2] else None,
+            'lecture_topic': r[3],
+            'faculty_username': r[4],
+            'total_marked': r[5],
+            'present_count': r[6]
+        })
+    return jsonify({'status': 'success', 'sessions': res})
+
+@app.route("/api/attendance/session/<int:session_id>")
+@login_required
+def api_get_session_details(session_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Get session details
+    cur.execute("""
+        SELECT s.id, s.department_id, d.name, s.session_date, s.lecture_topic, u.username
+        FROM attendance_sessions s
+        LEFT JOIN departments d ON s.department_id = d.id
+        LEFT JOIN users u ON s.faculty_id = u.id
+        WHERE s.id = %s
+    """, (session_id,))
+    session_row = cur.fetchone()
+    
+    if not session_row:
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Attendance session not found.'}), 404
+        
+    dept_id = session_row[1]
+    
+    # Get all active students of this department and their attendance status
+    cur.execute("""
+        SELECT s.id, s.name, s.email, COALESCE(r.status, 'Absent')
+        FROM students s
+        LEFT JOIN attendance_records r ON r.student_id = s.id AND r.session_id = %s
+        WHERE s.department_id = %s AND s.status = 'Active'
+        ORDER BY s.name
+    """, (session_id, dept_id))
+    students = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    student_list = []
+    for row in students:
+        student_list.append({
+            'id': row[0],
+            'name': row[1],
+            'email': row[2],
+            'status': row[3]
+        })
+        
+    return jsonify({
+        'status': 'success',
+        'session': {
+            'id': session_row[0],
+            'department_id': session_row[1],
+            'department_name': session_row[2],
+            'session_date': session_row[3].isoformat() if session_row[3] else None,
+            'lecture_topic': session_row[4],
+            'faculty_username': session_row[5]
+        },
+        'students': student_list
+    })
+
 
 @app.route("/api/attendance/defaulters")
 @login_required

@@ -129,6 +129,18 @@
             border-radius: var(--radius-md);
             margin-bottom: 10px;
         }
+
+        .clickable-session-item {
+            cursor: pointer;
+            transition: all var(--transition-fast) !important;
+        }
+
+        .clickable-session-item:hover {
+            background: rgba(59, 130, 246, 0.05) !important;
+            border-color: var(--primary) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
     </style>
 </head>
 <body class="light-theme">
@@ -242,6 +254,7 @@
             <!-- Tabs Navigation -->
             <div class="tab-menu">
                 <button class="tab-btn active" id="tabMarkBtn" onclick="switchTab('mark')">Mark Attendance</button>
+                <button class="tab-btn" id="tabViewEditBtn" onclick="switchTab('viewedit')">View/Edit Past Attendance</button>
                 <button class="tab-btn" id="tabDefaultersBtn" onclick="switchTab('defaulters')">Defaulters List (<75%)</button>
                 <button class="tab-btn" id="tabAnalyticsBtn" onclick="switchTab('analytics')">Attendance Analytics</button>
             </div>
@@ -305,6 +318,75 @@
                         </form>
                     </div>
 
+                    <!-- View/Edit Attendance Tab -->
+                    <div id="tabViewEditPane" class="main-card" style="display:none;">
+                        <h3 style="margin-bottom:15px; display:flex; align-items:center; gap:8px;">
+                            <span class="material-icons-round" style="color:var(--primary)">history_edu</span>
+                            <span>View & Edit Past Attendance Records</span>
+                        </h3>
+                        
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label for="sessionSelect">Select Past Attendance Session</label>
+                            <select id="sessionSelect" style="width: 100%;">
+                                <option value="">Choose Session...</option>
+                                <!-- Loaded dynamically via API -->
+                            </select>
+                        </div>
+
+                        <!-- Session Details and Student List Container (hidden until selected) -->
+                        <div id="sessionEditWrapper" style="display:none; margin-top:20px;">
+                            <div style="padding: 15px; background: rgba(0,0,0,0.015); border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 20px;">
+                                <h4 style="margin-bottom: 12px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                                    <span class="material-icons-round" style="font-size: 18px; color: var(--primary);">info</span>
+                                    <span>Session Information</span>
+                                </h4>
+                                <div class="form-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom: 15px;">
+                                    <div class="form-group">
+                                        <label for="editSessionDate">Session Date</label>
+                                        <input type="date" id="editSessionDate" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Department</label>
+                                        <input type="text" id="editSessionDept" disabled style="background: rgba(0,0,0,0.03); cursor: not-allowed;">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="editLectureTopic">Lecture Topic / Subject</label>
+                                    <input type="text" id="editLectureTopic" required>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; gap: 10px; flex-wrap: wrap;">
+                                <div style="display:flex; align-items:center; gap: 10px; flex: 1; min-width: 250px;">
+                                    <h4 style="font-weight:700; color:var(--text-main); margin: 0;">Marked Attendance Roll</h4>
+                                    <!-- Search filter for student roll list -->
+                                    <div class="search-box" style="margin: 0; padding: 4px 10px; display: flex; align-items: center; gap: 5px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); display: flex; width: 200px;">
+                                        <span class="material-icons-round" style="font-size: 16px; color: var(--text-muted);">search</span>
+                                        <input type="text" id="studentSearchInput" placeholder="Search student name..." style="border: none; outline: none; font-size: 12px; padding: 2px; width: 100%; background: transparent;">
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:10px;">
+                                    <button type="button" class="secondary-btn" onclick="toggleAllEditAttendance('Present')" style="font-size:11px; padding:6px 12px;">Mark All Present</button>
+                                    <button type="button" class="secondary-btn" onclick="toggleAllEditAttendance('Absent')" style="font-size:11px; padding:6px 12px;">Mark All Absent</button>
+                                </div>
+                            </div>
+
+                            <div class="student-roll-list" id="editStudentRollList">
+                                <!-- Loaded dynamically via API -->
+                            </div>
+
+                            <div style="display: flex; gap: 15px; margin-top: 25px;">
+                                <button type="button" class="primary-btn" id="updateAttendanceBtn">
+                                    <span class="material-icons-round">save</span>
+                                    <span>Save Changes</span>
+                                </button>
+                                <button type="button" class="secondary-btn" id="cancelEditBtn" style="border: 1px solid var(--border-color);">
+                                    <span>Cancel</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Defaulters Tab -->
                     <div id="tabDefaultersPane" class="main-card" style="display:none;">
                         <h3 style="margin-bottom:15px; display:flex; align-items:center; gap:8px;">
@@ -341,7 +423,7 @@
                         <div style="display:flex; flex-direction:column; gap:12px; margin-top:15px; max-height:500px; overflow-y:auto; padding-right:4px;">
                             {% if recent_sessions %}
                                 {% for sess in recent_sessions %}
-                                <div style="padding:12px; border-radius:var(--radius-sm); background:rgba(0,0,0,0.015); border:1px solid var(--border-color);">
+                                <div class="clickable-session-item" onclick="viewSessionFromHistory({{ sess[0] }})" style="padding:12px; border-radius:var(--radius-sm); background:rgba(0,0,0,0.015); border:1px solid var(--border-color);">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                         <span style="font-size:10px; font-weight:700; color:var(--text-muted);">{{ sess[2] }}</span>
                                         <span class="status-badge" style="font-size:9px; padding:2px 6px; background:rgba(16, 185, 129, 0.1); color:var(--success-text)">{{ sess[1] }}</span>
@@ -384,24 +466,32 @@
         // Switch panel tabs
         function switchTab(tab) {
             const markBtn = document.getElementById('tabMarkBtn');
+            const viewEditBtn = document.getElementById('tabViewEditBtn');
             const defaultersBtn = document.getElementById('tabDefaultersBtn');
             const analyticsBtn = document.getElementById('tabAnalyticsBtn');
 
             const markPane = document.getElementById('tabMarkPane');
+            const viewEditPane = document.getElementById('tabViewEditPane');
             const defaultersPane = document.getElementById('tabDefaultersPane');
             const analyticsPane = document.getElementById('tabAnalyticsPane');
 
             markBtn.classList.remove('active');
+            if (viewEditBtn) viewEditBtn.classList.remove('active');
             defaultersBtn.classList.remove('active');
             analyticsBtn.classList.remove('active');
 
             markPane.style.display = 'none';
+            if (viewEditPane) viewEditPane.style.display = 'none';
             defaultersPane.style.display = 'none';
             analyticsPane.style.display = 'none';
 
             if (tab === 'mark') {
                 markBtn.classList.add('active');
                 markPane.style.display = 'block';
+            } else if (tab === 'viewedit') {
+                if (viewEditBtn) viewEditBtn.classList.add('active');
+                if (viewEditPane) viewEditPane.style.display = 'block';
+                loadSessionsDropdown();
             } else if (tab === 'defaulters') {
                 defaultersBtn.classList.add('active');
                 defaultersPane.style.display = 'block';
@@ -412,6 +502,232 @@
                 loadAnalytics();
             }
         }
+
+        // View/Edit Session helpers
+        let editSessionId = null;
+        let originalSessionData = null;
+
+        function loadSessionsDropdown(selectedId = null) {
+            const select = document.getElementById('sessionSelect');
+            select.innerHTML = '<option value="">Loading sessions...</option>';
+            
+            fetch('/api/attendance/sessions')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        if (data.sessions.length === 0) {
+                            select.innerHTML = '<option value="">No past sessions found.</option>';
+                            return;
+                        }
+                        
+                        let html = '<option value="">Choose Session...</option>';
+                        data.sessions.forEach(sess => {
+                            const dateStr = sess.session_date ? sess.session_date.split('T')[0] : 'N/A';
+                            const title = `${dateStr} — ${escapeHtml(sess.department_name)} — Topic: ${escapeHtml(sess.lecture_topic)} (by ${escapeHtml(sess.faculty_username)})`;
+                            html += `<option value="${sess.id}">${title}</option>`;
+                        });
+                        select.innerHTML = html;
+                        
+                        if (selectedId) {
+                            select.value = selectedId;
+                            loadSessionForEditing(selectedId);
+                        }
+                    } else {
+                        select.innerHTML = '<option value="">Failed to load sessions.</option>';
+                    }
+                })
+                .catch(err => {
+                    select.innerHTML = '<option value="">Connection error.</option>';
+                });
+        }
+
+        document.getElementById('sessionSelect').addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (val) {
+                loadSessionForEditing(val);
+            } else {
+                document.getElementById('sessionEditWrapper').style.display = 'none';
+                editSessionId = null;
+            }
+        });
+
+        function loadSessionForEditing(sessionId) {
+            editSessionId = sessionId;
+            const wrapper = document.getElementById('sessionEditWrapper');
+            const container = document.getElementById('editStudentRollList');
+            container.innerHTML = '<div style="text-align:center; padding:30px;">Loading session records...</div>';
+            wrapper.style.display = 'block';
+
+            fetch(`/api/attendance/session/${sessionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        originalSessionData = data;
+                        
+                        // Populate session metadata fields
+                        document.getElementById('editSessionDate').value = data.session.session_date ? data.session.session_date.split('T')[0] : '';
+                        document.getElementById('editSessionDept').value = data.session.department_name;
+                        document.getElementById('editLectureTopic').value = data.session.lecture_topic;
+
+                        // Render roll list row-by-row
+                        renderEditRollList(data.students);
+                    } else {
+                        showToast(data.message || 'Failed to load session details.', 'danger');
+                        wrapper.style.display = 'none';
+                    }
+                })
+                .catch(err => {
+                    showToast('Connection error. Failed to retrieve session data.', 'danger');
+                    wrapper.style.display = 'none';
+                });
+        }
+
+        function renderEditRollList(students) {
+            const container = document.getElementById('editStudentRollList');
+            container.innerHTML = '';
+
+            if (students.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No active students found for this department.</div>`;
+                return;
+            }
+
+            let headerHtml = `
+                <div class="roll-row-header">
+                    <div>Student Name</div>
+                    <div>Email</div>
+                    <div style="text-align:center;">Status</div>
+                </div>
+            `;
+            let bodyHtml = '';
+
+            students.forEach(st => {
+                const btnClass = st.status.toLowerCase() === 'present' ? 'present' : 'absent';
+                const btnText = st.status;
+                bodyHtml += `
+                    <div class="roll-row edit-roll-row" data-student-id="${st.id}" data-student-name="${st.name.toLowerCase()}">
+                        <div style="font-weight:600; color:var(--text-main);">${escapeHtml(st.name)}</div>
+                        <div style="color:var(--text-muted); font-size:12px;">${escapeHtml(st.email)}</div>
+                        <div style="display:flex; justify-content:center;">
+                            <button type="button" class="toggle-attendance-btn ${btnClass}" onclick="toggleEditAttendance(this, '${st.status}')">${btnText}</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = headerHtml + bodyHtml;
+        }
+
+        function toggleEditAttendance(btn, state) {
+            if (state === 'Present') {
+                btn.className = 'toggle-attendance-btn absent';
+                btn.textContent = 'Absent';
+                btn.onclick = () => toggleEditAttendance(btn, 'Absent');
+            } else {
+                btn.className = 'toggle-attendance-btn present';
+                btn.textContent = 'Present';
+                btn.onclick = () => toggleEditAttendance(btn, 'Present');
+            }
+        }
+
+        function toggleAllEditAttendance(status) {
+            const rows = document.querySelectorAll('.edit-roll-row');
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const btn = row.querySelector('.toggle-attendance-btn');
+                    if (status === 'Present') {
+                        btn.className = 'toggle-attendance-btn present';
+                        btn.textContent = 'Present';
+                        btn.onclick = () => toggleEditAttendance(btn, 'Present');
+                    } else {
+                        btn.className = 'toggle-attendance-btn absent';
+                        btn.textContent = 'Absent';
+                        btn.onclick = () => toggleEditAttendance(btn, 'Absent');
+                    }
+                }
+            });
+        }
+
+        // Student search filter logic
+        document.getElementById('studentSearchInput').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('.edit-roll-row');
+            rows.forEach(row => {
+                const name = row.getAttribute('data-student-name');
+                if (name.includes(query)) {
+                    row.style.display = 'grid';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        // Click sidebar item handler
+        function viewSessionFromHistory(sessionId) {
+            switchTab('viewedit');
+            loadSessionsDropdown(sessionId);
+        }
+
+        // Handle update submission
+        document.getElementById('updateAttendanceBtn').addEventListener('click', () => {
+            if (!editSessionId) {
+                showToast('No active session selected.', 'danger');
+                return;
+            }
+
+            const newDate = document.getElementById('editSessionDate').value;
+            const newTopic = document.getElementById('editLectureTopic').value.trim();
+
+            if (!newDate || !newTopic) {
+                showToast('Date and Topic are required.', 'danger');
+                return;
+            }
+
+            const records = [];
+            const rows = document.querySelectorAll('.edit-roll-row');
+            rows.forEach(row => {
+                const sid = row.getAttribute('data-student-id');
+                const btn = row.querySelector('.toggle-attendance-btn');
+                const status = btn.classList.contains('present') ? 'Present' : 'Absent';
+                records.push({
+                    student_id: sid,
+                    status: status
+                });
+            });
+
+            fetch('/api/attendance/session/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: editSessionId,
+                    session_date: newDate,
+                    lecture_topic: newTopic,
+                    records: records
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('Attendance records updated successfully!', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showToast(data.message || 'Failed to update attendance.', 'danger');
+                }
+            })
+            .catch(err => {
+                showToast('Connection error. Failed to save records.', 'danger');
+            });
+        });
+
+        // Cancel button
+        document.getElementById('cancelEditBtn').addEventListener('click', () => {
+            document.getElementById('sessionEditWrapper').style.display = 'none';
+            document.getElementById('sessionSelect').value = '';
+            editSessionId = null;
+        });
 
         // Load students for roll call marking based on selected department
         document.getElementById('loadRollBtn').addEventListener('click', () => {

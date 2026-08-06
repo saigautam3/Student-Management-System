@@ -3,14 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | StudentSphere ERP</title>
+    <title>Login & Registration | StudentSphere ERP</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .auth-toggle-link {
+            font-size: 13px;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .auth-toggle-link:hover {
+            text-decoration: underline;
+        }
+        .auth-panel {
+            display: none;
+        }
+        .auth-panel.active {
+            display: block;
+        }
+    </style>
 </head>
 <body class="login-body">
 
-    <!-- Toast Notifications for Auth Errors -->
+    <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -29,44 +49,173 @@
         {% endwith %}
     </div>
 
-    <div class="login-wrapper">
-        <div class="login-card">
-            <div class="login-header">
-                <span class="material-icons-round login-logo">school</span>
-                <h2>Welcome to StudentSphere</h2>
-                <p>Enterprise Academic Records & Analytics</p>
+    <div class="login-wrapper" style="padding: 20px 0;">
+        <div class="login-card" style="max-width: 520px; width: 90%;">
+            
+            <!-- 1. SIGN IN PANEL -->
+            <div id="loginPanel" class="auth-panel active">
+                <div class="login-header">
+                    <span class="material-icons-round login-logo">school</span>
+                    <h2>Welcome to StudentSphere</h2>
+                    <p>Faculty & Academic ERP Portal</p>
+                </div>
+
+                <form action="/login" method="POST" class="login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <div class="input-icon-wrapper">
+                            <span class="material-icons-round input-icon">person</span>
+                            <input type="text" id="username" name="username" placeholder="faculty" required autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="input-icon-wrapper">
+                            <span class="material-icons-round input-icon">lock</span>
+                            <input type="password" id="password" name="password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="primary-btn login-btn">
+                        <span>Sign In</span>
+                        <span class="material-icons-round">login</span>
+                    </button>
+                </form>
+                
+                <div style="display:flex; justify-content:space-between; margin-top:15px; border-top:1px solid var(--border-color); padding-top:10px;">
+                    <a onclick="showPanel('registerPanel')" class="auth-toggle-link">Request Faculty Account</a>
+                    <a onclick="showPanel('forgotPanel')" class="auth-toggle-link" style="color:var(--text-muted);">Forgot Password?</a>
+                </div>
             </div>
 
-            <form action="/login" method="POST" class="login-form">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <div class="input-icon-wrapper">
-                        <span class="material-icons-round input-icon">person</span>
-                        <input type="text" id="username" name="username" placeholder="Enter username" required autocomplete="off">
-                    </div>
+            <!-- 2. REGISTRATION REQUEST PANEL -->
+            <div id="registerPanel" class="auth-panel">
+                <div class="login-header">
+                    <span class="material-icons-round login-logo" style="color:var(--primary);">badge</span>
+                    <h2>Request Faculty Account</h2>
+                    <p>Register as a new University Faculty member</p>
                 </div>
 
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <div class="input-icon-wrapper">
-                        <span class="material-icons-round input-icon">lock</span>
-                        <input type="password" id="password" name="password" placeholder="Enter password" required>
+                <form action="/register" method="POST" enctype="multipart/form-data" class="login-form" style="gap: 15px;">
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label for="fullName">Full Name</label>
+                            <input type="text" id="fullName" name="full_name" placeholder="John Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeeId">Employee ID</label>
+                            <input type="text" id="employeeId" name="employee_id" placeholder="EMP-123" required>
+                        </div>
                     </div>
+
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label for="email">University Email</label>
+                            <input type="email" id="email" name="email" placeholder="john.doe@university.edu" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="designation">Designation</label>
+                            <input type="text" id="designation" name="designation" placeholder="Assistant Professor" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="deptSelect">Academic Department</label>
+                        <select id="deptSelect" name="department_id" required style="width:100%; padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main);">
+                            <option value="">Select Department...</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept[0] }}">{{ dept[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regUsername">Username</label>
+                        <input type="text" id="regUsername" name="username" placeholder="johndoe" required>
+                    </div>
+
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label for="regPassword">Password</label>
+                            <input type="password" id="regPassword" name="password" placeholder="••••••••" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm Password</label>
+                            <input type="password" id="confirmPassword" name="confirm_password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="idUpload">Upload Faculty ID Card (Optional)</label>
+                        <input type="file" id="idUpload" name="faculty_id_card" accept="image/*" class="file-input-custom">
+                    </div>
+
+                    <button type="submit" class="primary-btn login-btn" style="margin-top:10px;">
+                        <span>Submit Registration</span>
+                        <span class="material-icons-round">send</span>
+                    </button>
+                </form>
+
+                <div style="margin-top:15px; border-top:1px solid var(--border-color); padding-top:10px; text-align:center;">
+                    <a onclick="showPanel('loginPanel')" class="auth-toggle-link">Already have an account? Sign In</a>
+                </div>
+            </div>
+
+            <!-- 3. FORGOT PASSWORD PANEL -->
+            <div id="forgotPanel" class="auth-panel">
+                <div class="login-header">
+                    <span class="material-icons-round login-logo" style="color:var(--warning);">lock_reset</span>
+                    <h2>Reset Password</h2>
+                    <p>Verify your details to set a new password</p>
                 </div>
 
-                <button type="submit" class="primary-btn login-btn">
-                    <span>Sign In</span>
-                    <span class="material-icons-round">login</span>
-                </button>
-            </form>
+                <form action="/forgot-password" method="POST" class="login-form" style="gap:15px;">
+                    <div class="form-group">
+                        <label for="verifyEmpId">Employee ID</label>
+                        <input type="text" id="verifyEmpId" name="employee_id" placeholder="EMP-123" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="verifyEmail">Registered Email</label>
+                        <input type="email" id="verifyEmail" name="email" placeholder="john.doe@university.edu" required>
+                    </div>
+
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label for="forgotPassword">New Password</label>
+                            <input type="password" id="forgotPassword" name="new_password" placeholder="••••••••" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="forgotConfirmPassword">Confirm Password</label>
+                            <input type="password" id="forgotConfirmPassword" name="confirm_password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="primary-btn login-btn" style="margin-top:10px;">
+                        <span>Reset Password</span>
+                        <span class="material-icons-round">lock_reset</span>
+                    </button>
+                </form>
+
+                <div style="margin-top:15px; border-top:1px solid var(--border-color); padding-top:10px; text-align:center;">
+                    <a onclick="showPanel('loginPanel')" class="auth-toggle-link">Back to Sign In</a>
+                </div>
+            </div>
+
             <div class="login-footer">
-                <p>Protected System. Authorized Access Only.</p>
+                <p>Confidential System. Authorized Faculty Access Only.</p>
             </div>
         </div>
     </div>
 
-    <!-- Auto-dismiss toast notifications -->
     <script>
+        function showPanel(panelId) {
+            document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(panelId).classList.add('active');
+        }
+
+        // Auto-dismiss toast notifications
         setTimeout(() => {
             const toasts = document.querySelectorAll(".toast");
             toasts.forEach(toast => {

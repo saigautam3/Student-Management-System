@@ -39,8 +39,16 @@ StudentSphere is a modern, production-quality Academic ERP and analytics portal 
 - **N - Notification Center**: Real-time system events (student additions, new bulletins, low-GPA alerts) trigger notices under a bell icon popover in the top navbar. Includes unread badges, mark-as-read, and clear-all operations.
 - **P - Private Faculty Notes**: A secure remarks manager where faculty can log, read, and delete confidential student evaluations (performance remarks, advisory logs) not exposed to students.
 - **R - Risk Prediction Analyzer**: Academic Risk Interventions engine that automatically classifies students into Low, Medium, and High Risk status based on CGPA and enrollment health.
-- **S - Secure Authentication Settings**: Features password validation filters (at least 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char) and options to update Faculty Profile usernames and emails directly from the portal.
+- **S - Secure Authentication & Approvals**: Replaced sign-up with a **Request Faculty Account** workflow. Administrators review registrations, manage roles (Admin / HOD / Faculty), suspend accounts, and override passwords.
 - **T - Transaction Timeline Logs**: Auto-logs all student history events (admission, transfers, GPA changes, remarks added) on a clean vertical timeline. Also tracks administrative session history on the dashboard with date-range filters (Today, Week, Month).
+
+---
+
+## 🔐 Role-Based Access Control (RBAC)
+
+- **Admin (Administrator):** Full administrative access including student registry, announcements, report generations, departments configuration, and faculty approvals/roles management.
+- **HOD (Head of Department):** Managing student records, announcements, academic reports, and academic departments edit capabilities. HOD cannot access Faculty Management controls.
+- **Faculty (Instructor):** Restricted access allowing student management, announcements, reports, and timeline audits. Faculty can only view departments (read-only) and cannot access Faculty Management controls.
 
 ---
 
@@ -82,7 +90,8 @@ Student-Management/
     ├── departments.html    # Academic department list, statistics, and CRUD forms
     ├── announcements.html  # Notice creation & publication board
     ├── reports.html        # Branded, print-ready overall academic reports
-    └── settings.html       # Change password & update profile settings panel
+    ├── faculty_mgmt.html   # Faculty approvals & access roles controller
+    └── faculty_profile.html# Faculty personal credentials and details settings
 ```
 
 ---
@@ -142,12 +151,20 @@ pip install -r requirements.txt
        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
 
-   -- 3. Users authentication table
+   -- 3. Users authentication & details table
    CREATE TABLE users (
        id SERIAL PRIMARY KEY,
        username VARCHAR(50) UNIQUE NOT NULL,
        password_hash VARCHAR(255) NOT NULL,
-       email VARCHAR(100),
+       email VARCHAR(100) UNIQUE NOT NULL,
+       full_name VARCHAR(100) NOT NULL,
+       employee_id VARCHAR(50) UNIQUE NOT NULL,
+       department_id INT REFERENCES departments(id) ON DELETE SET NULL,
+       designation VARCHAR(100),
+       image_path VARCHAR(255),
+       status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Active', 'Rejected', 'Suspended')),
+       role VARCHAR(20) DEFAULT 'Faculty' CHECK (role IN ('Admin', 'HOD', 'Faculty')),
+       last_login TIMESTAMP,
        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
 
@@ -204,7 +221,7 @@ pip install -r requirements.txt
    ```
 
 ### 5. Run DB Migrations & Initialize Default User
-To automatically create the tables, migrate existing data, and insert the default Faculty login:
+To automatically create the tables, migrate existing data, and insert the default Faculty logins:
 ```bash
 python migrate_dashboard.py
 ```
@@ -216,8 +233,8 @@ def get_connection():
     return psycopg2.connect(
         host="localhost",
         database="studentdb",
-        user="your_username",
-        password="your_password",
+        user="postgres",
+        password="root",
         port="5432"
     )
 ```
@@ -230,11 +247,18 @@ Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your web browser.
 
 ---
 
-## 🔑 Default Credentials
+## 🔑 Test Credentials
 
-Log in using these default credentials (you can change them in the Settings page after logging in):
-- **Username:** `faculty`
-- **Password:** `FacultyPass123!`
+Log in using these seeded accounts to test different access roles:
+- **Admin Account:**
+  - **Username:** `faculty`
+  - **Password:** `FacultyPass123!`
+- **HOD Account:**
+  - **Username:** `hod_cse`
+  - **Password:** `HodPass123!`
+- **Faculty Account (Pending Request):**
+  - **Username:** `faculty_john`
+  - **Password:** `FacPass123!`
 
 ---
 

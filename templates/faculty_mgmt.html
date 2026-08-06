@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Management | StudentSphere</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .status-pending {
+            background: var(--warning-bg);
+            color: var(--warning-text);
+        }
+        .status-rejected {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+        }
+        .status-suspended {
+            background: rgba(100, 116, 139, 0.15);
+            color: rgb(100, 116, 139);
+        }
+    </style>
+</head>
+<body class="light-theme">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic ERP</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="/" class="menu-item">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/#registry-section" class="menu-item">
+                    <span class="material-icons-round">groups</span>
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item">
+                    <span class="material-icons-round">domain</span>
+                    <span>Departments</span>
+                </a>
+                <a href="/announcements" class="menu-item">
+                    <span class="material-icons-round">campaign</span>
+                    <span>Announcements</span>
+                </a>
+                {% if session['user']['role'] == 'Admin' %}
+                <a href="/faculty" class="menu-item active" id="menu-faculty">
+                    <span class="material-icons-round">badge</span>
+                    <span>Faculty Management</span>
+                </a>
+                {% endif %}
+                <a href="/profile" class="menu-item" id="menu-profile">
+                    <span class="material-icons-round">manage_accounts</span>
+                    <span>Faculty Profile</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>👥 Faculty Accounts & Approvals</h2>
+                    <p class="subtitle">Manage registration requests, configure permissions, and suspend accounts</p>
+                </div>
+            </header>
+
+            <main class="main-card">
+                <div class="table-toolbar">
+                    <div class="toolbar-title">
+                        <h3>All Faculty Members & Applicants</h3>
+                        <span class="registry-count">{{ faculty_list|length }} records registered</span>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Sl</th>
+                                <th>Faculty Profile</th>
+                                <th>Employee ID</th>
+                                <th>Designation</th>
+                                <th>Department</th>
+                                <th>Access Role</th>
+                                <th>Account Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if faculty_list %}
+                                {% for faculty in faculty_list %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        <div class="student-profile">
+                                            <div class="avatar-container">
+                                                {% if faculty[9] %}
+                                                    <img src="{{ url_for('static', filename=faculty[9].replace('static/', '')) }}" alt="{{ faculty[3] }}" class="table-avatar-img">
+                                                {% else %}
+                                                    <div class="avatar" style="background:var(--secondary-gradient);">{{ faculty[3][:1]|upper }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div>
+                                                <span class="student-name" style="font-weight:700;">{{ faculty[3] }}</span>
+                                                <p style="font-size:11px; color:var(--text-muted);">{{ faculty[2] }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td style="font-weight:600;">{{ faculty[4] }}</td>
+                                    <td>{{ faculty[6] or 'N/A' }}</td>
+                                    <td>
+                                        <span class="dept-badge">{{ faculty[5] or 'Unassigned' }}</span>
+                                    </td>
+                                    <td>
+                                        <form action="/faculty/role/{{ faculty[0] }}" method="POST" style="display:inline-block;">
+                                            <select name="role" onchange="this.form.submit()" style="padding:4px 8px; font-size:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main);">
+                                                <option value="Faculty" {% if faculty[8] == 'Faculty' %}selected{% endif %}>Faculty</option>
+                                                <option value="HOD" {% if faculty[8] == 'HOD' %}selected{% endif %}>HOD</option>
+                                                <option value="Admin" {% if faculty[8] == 'Admin' %}selected{% endif %}>Admin</option>
+                                            </select>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        <span class="status-badge {% if faculty[7] == 'Pending' %}status-pending{% elif faculty[7] == 'Active' %}status-active{% elif faculty[7] == 'Suspended' %}status-suspended{% else %}status-rejected{% endif %}">
+                                            {{ faculty[7] }}
+                                        </span>
+                                    </td>
+                                    <td>{{ faculty[11].strftime('%m-%d %H:%M') if faculty[11] else 'Never' }}</td>
+                                    <td>
+                                        <div class="action-buttons" style="gap:5px;">
+                                            {% if faculty[7] == 'Pending' %}
+                                            <form action="/faculty/status/{{ faculty[0] }}/Active" method="POST" style="display:inline;">
+                                                <button type="submit" class="action-btn edit-btn" title="Approve Registration" style="color:var(--success);">
+                                                    <span class="material-icons-round">check_circle</span>
+                                                </button>
+                                            </form>
+                                            <form action="/faculty/status/{{ faculty[0] }}/Rejected" method="POST" style="display:inline;">
+                                                <button type="submit" class="action-btn delete-btn" title="Reject Registration">
+                                                    <span class="material-icons-round">cancel</span>
+                                                </button>
+                                            </form>
+                                            {% elif faculty[7] == 'Active' %}
+                                            <form action="/faculty/status/{{ faculty[0] }}/Suspended" method="POST" style="display:inline;">
+                                                <button type="submit" class="action-btn edit-btn" title="Suspend Faculty" style="color:var(--warning);">
+                                                    <span class="material-icons-round">block</span>
+                                                </button>
+                                            </form>
+                                            {% elif faculty[7] == 'Suspended' %}
+                                            <form action="/faculty/status/{{ faculty[0] }}/Active" method="POST" style="display:inline;">
+                                                <button type="submit" class="action-btn edit-btn" title="Reactivate Faculty" style="color:var(--success);">
+                                                    <span class="material-icons-round">check_circle</span>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                            
+                                            <!-- Reset password trigger -->
+                                            <button class="action-btn edit-btn" title="Reset Password" onclick="openResetModal('{{ faculty[0] }}', '{{ faculty[3]|escape }}')">
+                                                <span class="material-icons-round">vpn_key</span>
+                                            </button>
+
+                                            <!-- Delete Faculty -->
+                                            <form action="/faculty/delete/{{ faculty[0] }}" method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete faculty account: {{ faculty[3]|escape }}?')">
+                                                <button type="submit" class="action-btn delete-btn" title="Delete Faculty Account">
+                                                    <span class="material-icons-round">delete</span>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">No faculty registered.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </main>
+    </div>
+
+    <!-- Administrative Password Override Modal -->
+    <div class="modal-overlay" id="resetModal" style="display:none;">
+        <div class="modal-card" style="max-width:400px;">
+            <div class="modal-header">
+                <h3>Admin Password Override</h3>
+                <button class="close-modal-btn" onclick="closeResetModal()">&times;</button>
+            </div>
+            <form id="resetForm" action="" method="POST" style="display:flex; flex-direction:column; gap:15px; padding-top:10px;">
+                <p style="font-size:13px; color:var(--text-muted);">Set a new password for <strong id="resetTargetUser">User</strong>.</p>
+                <div class="form-group">
+                    <label for="new_password">New Password</label>
+                    <input type="password" name="new_password" required placeholder="••••••••">
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" name="confirm_password" required placeholder="••••••••">
+                </div>
+                <div class="modal-actions" style="border-top:none; padding-top:0;">
+                    <button type="button" class="secondary-btn" onclick="closeResetModal()">Cancel</button>
+                    <button type="submit" class="primary-btn">Save Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const storedTheme = localStorage.getItem('theme') || 'light';
+        if (storedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.body.classList.remove('light-theme');
+        }
+
+        function openResetModal(fid, name) {
+            document.getElementById("resetTargetUser").textContent = name;
+            document.getElementById("resetForm").action = `/faculty/reset-password/${fid}`;
+            document.getElementById("resetModal").style.display = "flex";
+        }
+
+        function closeResetModal() {
+            document.getElementById("resetModal").style.display = "none";
+        }
+
+        // Dismiss Toast
+        setTimeout(() => {
+            const toasts = document.querySelectorAll(".toast");
+            toasts.forEach(toast => {
+                toast.style.opacity = "0";
+                toast.style.transform = "translateX(50px)";
+                toast.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+                setTimeout(() => toast.remove(), 400);
+            });
+        }, 4000);
+    </script>
+</body>
+</html>

@@ -69,9 +69,15 @@
                     <span class="material-icons-round">campaign</span>
                     <span>Announcements</span>
                 </a>
-                <a href="/settings" class="menu-item" id="menu-settings">
-                    <span class="material-icons-round">settings</span>
-                    <span>Settings</span>
+                {% if session['user']['role'] == 'Admin' %}
+                <a href="/faculty" class="menu-item" id="menu-faculty">
+                    <span class="material-icons-round">badge</span>
+                    <span>Faculty Management</span>
+                </a>
+                {% endif %}
+                <a href="/profile" class="menu-item" id="menu-profile">
+                    <span class="material-icons-round">manage_accounts</span>
+                    <span>Faculty Profile</span>
                 </a>
                 <a href="/logout" class="menu-item logout-item">
                     <span class="material-icons-round">logout</span>
@@ -213,6 +219,59 @@
                         </div>
                     </div>
                 </section>
+
+                {% if session['user']['role'] in ['Admin', 'HOD'] and faculty_kpi %}
+                <!-- Faculty KPI Statistics Grid -->
+                <h4 style="font-size: 15px; font-weight: 700; margin-top: 25px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                    <span class="material-icons-round" style="color:var(--primary)">badge</span>
+                    <span>Faculty Registry Metrics</span>
+                </h4>
+                <section class="stats-grid" style="margin-bottom: 25px;">
+                    <!-- Total Faculty -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Total Faculty</span>
+                            <h2 class="stat-value">{{ faculty_kpi.total }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper" style="background: rgba(59, 130, 246, 0.1); color: var(--primary)">
+                            <span class="material-icons-round">badge</span>
+                        </div>
+                    </div>
+
+                    <!-- Pending Requests -->
+                    <div class="stat-card" style="border-left: 4px solid var(--warning);">
+                        <div class="stat-info">
+                            <span class="stat-label" style="color:var(--warning)">Pending Account Requests</span>
+                            <h2 class="stat-value">{{ faculty_kpi.pending }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper" style="background: var(--warning-bg); color: var(--warning-text)">
+                            <span class="material-icons-round">pending_actions</span>
+                        </div>
+                    </div>
+
+                    <!-- Active Faculty -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Active Accounts</span>
+                            <h2 class="stat-value">{{ faculty_kpi.active }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper active-color">
+                            <span class="material-icons-round">how_to_reg</span>
+                        </div>
+                    </div>
+
+                    <!-- Suspended Faculty -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Suspended Accounts</span>
+                            <h2 class="stat-value">{{ faculty_kpi.suspended }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper" style="background: rgba(239, 68, 68, 0.1); color: var(--danger)">
+                            <span class="material-icons-round">block</span>
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
 
                 <!-- AI Insights & Leaderboard Panel -->
                 <section class="analytics-grid" style="grid-template-columns: 1fr 1fr;">

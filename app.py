@@ -3,12 +3,14 @@ from database import get_connection, log_activity, create_notification
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
+from datetime import timedelta
 import os
 import time
 import re
 
 app = Flask(__name__)
 app.secret_key = "student_management_secret_erp"
+app.permanent_session_lifetime = timedelta(minutes=30)
 
 # Config uploads
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
@@ -21,13 +23,49 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Login required decorator
+# ==========================================
+# RBAC DECORATORS
+# ==========================================
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
             flash("Access denied. Please log in first.", "warning")
             return redirect(url_for('login'))
+        
+        # Verify account status is still active in the database
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT status, role FROM users WHERE id = %s", (session['user']['id'],))
+        res = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not res or res[0] != 'Active':
+            session.pop('user', None)
+            flash("Your account has been deactivated or suspended.", "danger")
+            return redirect(url_for('login'))
+            
+        # Update session role just in case admin changed it
+        session['user']['role'] = res[1]
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session or session['user'].get('role') != 'Admin':
+            flash("Access denied. Admin privileges required.", "danger")
+            return redirect(url_for('home'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def hod_or_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session or session['user'].get('role') not in ['Admin', 'HOD']:
+            flash("Access denied. HOD or Admin privileges required.", "danger")
+            return redirect(url_for('home'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -60,30 +98,187 @@ def login():
     if 'user' in session:
         return redirect(url_for('home'))
         
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    cur.close()
+    conn.close()
+
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
         
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT id, username, password_hash FROM users WHERE username = %s", (username,))
+        cur.execute("""
+            SELECT id, username, password_hash, status, role, full_name 
+            FROM users WHERE username = %s
+        """, (username,))
         user_record = cur.fetchone()
+        
+        if user_record:
+            uid, uname, pw_hash, status, role, full_name = user_record
+            if check_password_hash(pw_hash, password):
+                if status != 'Active':
+                    cur.close()
+                    conn.close()
+                    if status == 'Pending':
+                        flash("Your request has been submitted successfully and is awaiting administrator approval.", "info")
+                    elif status == 'Suspended':
+                        flash("Your account has been suspended. Please contact the administrator.", "danger")
+                    else:
+                        flash("Your account request was rejected.", "danger")
+                    return redirect(url_for('login'))
+                
+                # Active user login
+                session.permanent = True
+                session['user'] = {
+                    'id': uid,
+                    'username': uname,
+                    'role': role,
+                    'full_name': full_name
+                }
+                
+                # Update last login timestamp
+                cur.execute("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s", (uid,))
+                conn.commit()
+                cur.close()
+                conn.close()
+                
+                log_activity("Faculty Login", f"User '{username}' logged in successfully.", username)
+                
+                # Notification alert
+                create_notification(uid, 'Security', f"Logged in from IP: {request.remote_addr}")
+                
+                flash("Welcome back! Logged in successfully.", "success")
+                return redirect(url_for('home'))
+        
         cur.close()
         conn.close()
-        
-        if user_record and check_password_hash(user_record[2], password):
-            session['user'] = {
-                'id': user_record[0],
-                'username': user_record[1]
-            }
-            log_activity("Faculty Login", f"User '{username}' logged in successfully.", username)
-            flash("Welcome back! Logged in successfully.", "success")
-            return redirect(url_for('home'))
-        else:
-            log_activity("Failed Login Attempt", f"Username attempted: '{username}'")
-            flash("Invalid username or password.", "danger")
+        log_activity("Failed Login Attempt", f"Username attempted: '{username}'")
+        flash("Invalid username or password.", "danger")
             
-    return render_template("login.html")
+    return render_template("login.html", departments=departments)
+
+@app.route("/register", methods=["POST"])
+def register():
+    full_name = request.form["full_name"].strip()
+    employee_id = request.form["employee_id"].strip().upper()
+    email = request.form["email"].strip().lower()
+    department_id = int(request.form["department_id"])
+    designation = request.form["designation"].strip()
+    username = request.form["username"].strip()
+    password = request.form["password"].strip()
+    confirm_password = request.form["confirm_password"].strip()
+
+    if password != confirm_password:
+        flash("Passwords do not match.", "danger")
+        return redirect(url_for('login'))
+
+    # Validate secure username/password rules
+    is_valid_uname, error_uname = is_secure_username(username)
+    if not is_valid_uname:
+        flash(error_uname, "danger")
+        return redirect(url_for('login'))
+
+    is_valid_pwd, error_pwd = is_secure_password(password)
+    if not is_valid_pwd:
+        flash(error_pwd, "danger")
+        return redirect(url_for('login'))
+
+    # Handle optional Faculty ID file upload
+    image_path = None
+    if 'faculty_id_card' in request.files:
+        file = request.files['faculty_id_card']
+        if file and file.filename != '' and allowed_file(file.filename):
+            filename = f"fac_id_{employee_id}_{int(time.time())}_{secure_filename(file.filename)}"
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            image_path = f"static/uploads/{filename}"
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        # Check duplicates
+        cur.execute("SELECT COUNT(*) FROM users WHERE username = %s", (username,))
+        if cur.fetchone()[0] > 0:
+            flash("Username is already taken.", "warning")
+            return redirect(url_for('login'))
+
+        cur.execute("SELECT COUNT(*) FROM users WHERE email = %s", (email,))
+        if cur.fetchone()[0] > 0:
+            flash("Email address is already registered.", "warning")
+            return redirect(url_for('login'))
+
+        cur.execute("SELECT COUNT(*) FROM users WHERE employee_id = %s", (employee_id,))
+        if cur.fetchone()[0] > 0:
+            flash("Employee ID is already registered.", "warning")
+            return redirect(url_for('login'))
+
+        hashed_pwd = generate_password_hash(password)
+        cur.execute("""
+            INSERT INTO users (username, password_hash, email, full_name, employee_id, department_id, designation, image_path, status, role)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Pending', 'Faculty')
+            RETURNING id;
+        """, (username, hashed_pwd, email, full_name, employee_id, department_id, designation, image_path))
+        new_uid = cur.fetchone()[0]
+        conn.commit()
+
+        # Notify Administrators
+        cur.execute("SELECT id FROM users WHERE role = 'Admin'")
+        admin_ids = [row[0] for row in cur.fetchall()]
+        for aid in admin_ids:
+            create_notification(aid, 'System Alert', f"New account request submitted by {full_name} ({employee_id})")
+
+        log_activity("Faculty Account Requested", f"User '{username}' registered with status Pending.", username)
+        flash("Your request has been submitted successfully and is awaiting administrator approval.", "info")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Failed to register account: {str(e)}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for('login'))
+
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    employee_id = request.form["employee_id"].strip().upper()
+    email = request.form["email"].strip().lower()
+    new_password = request.form["new_password"].strip()
+    confirm_password = request.form["confirm_password"].strip()
+
+    if new_password != confirm_password:
+        flash("Passwords do not match.", "danger")
+        return redirect(url_for('login'))
+
+    is_valid_pwd, error_pwd = is_secure_password(new_password)
+    if not is_valid_pwd:
+        flash(error_pwd, "danger")
+        return redirect(url_for('login'))
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, username FROM users WHERE employee_id = %s AND email = %s", (employee_id, email))
+    user_record = cur.fetchone()
+
+    if not user_record:
+        cur.close()
+        conn.close()
+        flash("Security verification failed. Employee ID and Email do not match.", "danger")
+        return redirect(url_for('login'))
+
+    uid, username = user_record
+    hashed_pwd = generate_password_hash(new_password)
+    cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed_pwd, uid))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Password Recovered", f"User '{username}' recovered password using Employee ID verification.", username)
+    flash("Password reset successfully. Please log in with your new password.", "success")
+    return redirect(url_for('login'))
 
 @app.route("/logout")
 def logout():
@@ -101,6 +296,7 @@ def logout():
 @login_required
 def home():
     username = session['user']['username']
+    user_role = session['user']['role']
     search = request.args.get("search", "")
     department_filter = request.args.get("department", "")
     status_filter = request.args.get("status", "")
@@ -145,6 +341,18 @@ def home():
     cur.execute("SELECT COUNT(*) FROM students WHERE status = 'Graduated'")
     graduated_students = cur.fetchone()[0]
 
+    # ---------------- Faculty KPIs (Admin/HOD view) ----------------
+    faculty_kpi = {}
+    if user_role in ['Admin', 'HOD']:
+        cur.execute("SELECT COUNT(*) FROM users")
+        faculty_kpi['total'] = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM users WHERE status = 'Pending'")
+        faculty_kpi['pending'] = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM users WHERE status = 'Active'")
+        faculty_kpi['active'] = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM users WHERE status = 'Suspended'")
+        faculty_kpi['suspended'] = cur.fetchone()[0]
+
     # ---------------- AI Academic Insights ----------------
     insights = []
     if total_students > 0:
@@ -180,23 +388,6 @@ def home():
                 'desc': f"{low_dept[0]} has the lowest average GPA of {low_dept[1]}. Recommend academic mentoring interventions.",
                 'icon': 'announcement',
                 'class': 'warning'
-            })
-
-        # Max students dept
-        cur.execute("""
-            SELECT d.name, COUNT(s.id) AS num_students
-            FROM departments d
-            JOIN students s ON s.department_id = d.id
-            GROUP BY d.id, d.name
-            ORDER BY num_students DESC LIMIT 1
-        """)
-        max_dept = cur.fetchone()
-        if max_dept:
-            insights.append({
-                'title': 'Department Concentration',
-                'desc': f"{max_dept[0]} holds the highest enrollment density with {max_dept[1]} registered student records.",
-                'icon': 'groups',
-                'class': 'info'
             })
 
     # ---------------- Risk Prediction Calculations ----------------
@@ -242,7 +433,7 @@ def home():
                 'reason': reason
             })
     
-    # Sort: High risk first, then lowest GPA first
+    # Sort: High risk first
     at_risk_list.sort(key=lambda x: (0 if x['level'] == 'High' else 1, x['gpa']))
 
     # ---------------- Department Leaderboard ----------------
@@ -279,7 +470,6 @@ def home():
     """)
     dept_stats = cur.fetchall()
 
-    # GPA Distribution
     cur.execute("""
         SELECT 
             COUNT(CASE WHEN gpa < 5 THEN 1 END) as gpa_0_5,
@@ -290,7 +480,6 @@ def home():
     """)
     gpa_dist = list(cur.fetchone())
 
-    # Status Distribution
     cur.execute("SELECT status, COUNT(*) FROM students GROUP BY status")
     status_counts = dict(cur.fetchall())
     status_dist = {
@@ -299,7 +488,6 @@ def home():
         'Graduated': status_counts.get('Graduated', 0)
     }
 
-    # Age Distribution
     cur.execute("""
         SELECT 
             COUNT(CASE WHEN age < 18 THEN 1 END) as age_under_18,
@@ -310,7 +498,6 @@ def home():
     """)
     age_dist = list(cur.fetchone())
 
-    # Monthly Admissions & Growth
     cur.execute("""
         SELECT TO_CHAR(created_at, 'YYYY-MM') AS month, COUNT(*) 
         FROM students 
@@ -339,11 +526,11 @@ def home():
         'cumulativeCounts': cumulative_counts
     }
 
-    # ---------------- Departments for Filter / Form ----------------
+    # Departments for Filter / Form
     cur.execute("SELECT id, name FROM departments ORDER BY name")
     departments = cur.fetchall()
 
-    # ---------------- Recent Announcements ----------------
+    # Recent Announcements
     cur.execute("""
         SELECT a.id, a.title, a.description, a.category, a.priority, a.created_at, u.username
         FROM announcements a
@@ -354,7 +541,7 @@ def home():
     """)
     announcements_list = cur.fetchall()
 
-    # ---------------- Students Records (Filtered) ----------------
+    # Students Records (Filtered)
     query = """
         SELECT s.id, s.name, s.age, d.name AS department_name, s.email, s.gpa, s.status, s.image_path, s.department_id
         FROM students s
@@ -383,7 +570,7 @@ def home():
     cur.execute(query, tuple(values))
     students = cur.fetchall()
 
-    # ---------------- Faculty Activity Logs (Filtered) ----------------
+    # Faculty Activity Logs
     timeline_query = """
         SELECT action, details, created_at, faculty_username 
         FROM activity_logs 
@@ -425,6 +612,7 @@ def home():
         high_risk_count=high_risk_count,
         medium_risk_count=medium_risk_count,
         leaderboard=leaderboard[:3],
+        faculty_kpi=faculty_kpi,
         selected_department=department_filter,
         selected_status=status_filter,
         gpa_min=gpa_min,
@@ -444,7 +632,6 @@ def student_profile(id):
     conn = get_connection()
     cur = conn.cursor()
     
-    # Get student record
     cur.execute("""
         SELECT s.id, s.name, s.age, d.name AS department_name, s.email, s.gpa, s.status, s.image_path, s.created_at
         FROM students s
@@ -459,7 +646,7 @@ def student_profile(id):
         flash("Student profile not found.", "warning")
         return redirect(url_for('home'))
 
-    # Get private notes
+    # Notes
     cur.execute("""
         SELECT n.id, n.note, n.created_at, u.username
         FROM student_notes n
@@ -469,7 +656,7 @@ def student_profile(id):
     """, (id,))
     notes = cur.fetchall()
 
-    # Get chronological timeline events
+    # Timeline
     cur.execute("""
         SELECT event_type, description, created_at 
         FROM student_timeline 
@@ -481,9 +668,7 @@ def student_profile(id):
     cur.close()
     conn.close()
     
-    # Log timeline view action
     log_activity("Profile Viewed", f"Viewed profile of student {student[1]} (ID: {id})", username)
-    
     return render_template("profile.html", student=student, notes=notes, timeline=timeline)
 
 # ==========================================
@@ -502,14 +687,11 @@ def add_student_note(id):
 
     conn = get_connection()
     cur = conn.cursor()
-    
-    # Insert note
     cur.execute("""
         INSERT INTO student_notes (student_id, faculty_id, note)
         VALUES (%s, %s, %s)
     """, (id, faculty_id, note_text))
     
-    # Log in student timeline
     cur.execute("""
         INSERT INTO student_timeline (student_id, event_type, description)
         VALUES (%s, 'Faculty Remark', %s)
@@ -529,11 +711,8 @@ def delete_student_note(sid, nid):
     username = session['user']['username']
     conn = get_connection()
     cur = conn.cursor()
-    
-    # Delete note
     cur.execute("DELETE FROM student_notes WHERE id = %s AND student_id = %s", (nid, sid))
     
-    # Log timeline
     cur.execute("""
         INSERT INTO student_timeline (student_id, event_type, description)
         VALUES (%s, 'Profile Modification', %s)
@@ -561,7 +740,6 @@ def add_student():
     gpa = float(request.form.get("gpa", "0.00"))
     status = request.form.get("status", "Active").strip()
 
-    # Image upload
     image_path = None
     if 'profile_image' in request.files:
         file = request.files['profile_image']
@@ -573,7 +751,6 @@ def add_student():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Check duplicate email
     cur.execute("SELECT COUNT(*) FROM students WHERE email = %s", (email,))
     if cur.fetchone()[0] > 0:
         cur.close()
@@ -581,37 +758,28 @@ def add_student():
         flash(f"Failed to add student. A record with email '{email}' already exists!", "warning")
         return redirect(url_for('home'))
 
-    # Insert student
-    cur.execute(
-        """
-        INSERT INTO students
-        (name, age, department_id, email, gpa, status, image_path)
+    cur.execute("""
+        INSERT INTO students (name, age, department_id, email, gpa, status, image_path)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING id;
-        """,
-        (name, age, department_id, email, gpa, status, image_path)
-    )
+    """, (name, age, department_id, email, gpa, status, image_path))
     new_id = cur.fetchone()[0]
 
-    # Create timeline entry
     cur.execute("""
         INSERT INTO student_timeline (student_id, event_type, description)
         VALUES (%s, 'Admission', %s)
     """, (new_id, f"Admitted to university with status '{status}' and initial GPA of {gpa}"))
-
     conn.commit()
     
-    # Fetch all faculty to notify
     cur.execute("SELECT id FROM users")
     faculty_ids = [row[0] for row in cur.fetchall()]
     cur.close()
     conn.close()
 
-    # Create notification alerts for all faculty
     for fid in faculty_ids:
-        create_notification(fid, 'Student Alert', f"New student registered: {name} (Dept ID: {department_id})")
+        create_notification(fid, 'Student Alert', f"New student registered: {name}")
 
-    log_activity("Student Added", f"Added student: {name} (Email: {email}, GPA: {gpa})", username)
+    log_activity("Student Added", f"Added student: {name} (GPA: {gpa})", username)
     flash(f"Student '{name}' added successfully!", "success")
     return redirect(url_for('home'))
 
@@ -631,8 +799,6 @@ def update_student(id):
 
     conn = get_connection()
     cur = conn.cursor()
-
-    # Get old details to log differences in timeline
     cur.execute("SELECT name, age, department_id, email, gpa, status FROM students WHERE id = %s", (id,))
     old = cur.fetchone()
     
@@ -642,7 +808,6 @@ def update_student(id):
         flash("Student not found.", "warning")
         return redirect(url_for('home'))
 
-    # Check duplicate email
     cur.execute("SELECT COUNT(*) FROM students WHERE email = %s AND id != %s", (email, id))
     if cur.fetchone()[0] > 0:
         cur.close()
@@ -650,7 +815,6 @@ def update_student(id):
         flash(f"Failed to update student. A record with email '{email}' already exists!", "warning")
         return redirect(url_for('home'))
 
-    # Handle image upload
     image_path = None
     if 'profile_image' in request.files:
         file = request.files['profile_image']
@@ -660,25 +824,19 @@ def update_student(id):
             image_path = f"static/uploads/{filename}"
 
     if image_path:
-        cur.execute(
-            """
+        cur.execute("""
             UPDATE students
             SET name=%s, age=%s, department_id=%s, email=%s, gpa=%s, status=%s, image_path=%s
             WHERE id=%s
-            """,
-            (name, age, department_id, email, gpa, status, image_path, id)
-        )
+        """, (name, age, department_id, email, gpa, status, image_path, id))
     else:
-        cur.execute(
-            """
+        cur.execute("""
             UPDATE students
             SET name=%s, age=%s, department_id=%s, email=%s, gpa=%s, status=%s
             WHERE id=%s
-            """,
-            (name, age, department_id, email, gpa, status, id)
-        )
+        """, (name, age, department_id, email, gpa, status, id))
 
-    # Log changes into student academic timeline
+    # Log changes
     if old[0] != name:
         cur.execute("INSERT INTO student_timeline (student_id, event_type, description) VALUES (%s, 'Profile Modification', %s)", (id, f"Name changed from '{old[0]}' to '{name}'"))
     if old[2] != department_id:
@@ -707,8 +865,6 @@ def delete_student(id):
     username = session['user']['username']
     conn = get_connection()
     cur = conn.cursor()
-    
-    # Get name before deleting for logs
     cur.execute("SELECT name FROM students WHERE id=%s", (id,))
     res = cur.fetchone()
     name = res[0] if res else f"ID: {id}"
@@ -750,7 +906,6 @@ def bulk_operations():
         
     elif action == "status_update" and status_val:
         cur.execute("UPDATE students SET status = %s WHERE id = ANY(%s)", (status_val, ids))
-        # Log timeline events for updated students
         for sid in ids:
             cur.execute("INSERT INTO student_timeline (student_id, event_type, description) VALUES (%s, 'Status Update', %s)", (sid, f"Status updated via bulk action to '{status_val}'"))
         conn.commit()
@@ -763,15 +918,13 @@ def bulk_operations():
     return redirect(url_for('home'))
 
 # ==========================================
-# DEPARTMENT MANAGEMENT
+# DEPARTMENT MANAGEMENT (HOD OR ADMIN ONLY FOR MUTATION)
 # ==========================================
 @app.route("/departments")
 @login_required
 def departments_dashboard():
     conn = get_connection()
     cur = conn.cursor()
-    
-    # Get all departments with their details and aggregated stats
     cur.execute("""
         SELECT d.id, d.name, d.code, d.description, 
                COUNT(s.id) AS student_count, 
@@ -782,14 +935,13 @@ def departments_dashboard():
         ORDER BY d.name
     """)
     departments = cur.fetchall()
-    
     cur.close()
     conn.close()
-    
     return render_template("departments.html", departments=departments)
 
 @app.route("/departments/add", methods=["POST"])
 @login_required
+@hod_or_admin_required
 def add_department():
     username = session['user']['username']
     name = request.form["name"].strip()
@@ -816,6 +968,7 @@ def add_department():
 
 @app.route("/departments/edit/<int:id>", methods=["POST"])
 @login_required
+@hod_or_admin_required
 def edit_department(id):
     username = session['user']['username']
     name = request.form["name"].strip()
@@ -843,6 +996,7 @@ def edit_department(id):
 
 @app.route("/departments/delete/<int:id>")
 @login_required
+@hod_or_admin_required
 def delete_department(id):
     username = session['user']['username']
     conn = get_connection()
@@ -870,8 +1024,6 @@ def delete_department(id):
 def announcements_dashboard():
     conn = get_connection()
     cur = conn.cursor()
-    
-    # Query all announcements
     cur.execute("""
         SELECT a.id, a.title, a.description, a.category, a.priority, a.created_at, a.expiry_date, u.username, a.scheduled_date
         FROM announcements a
@@ -879,10 +1031,8 @@ def announcements_dashboard():
         ORDER BY a.created_at DESC
     """)
     announcements = cur.fetchall()
-    
     cur.close()
     conn.close()
-    
     return render_template("announcements.html", announcements=announcements)
 
 @app.route("/announcements/add", methods=["POST"])
@@ -897,7 +1047,6 @@ def add_announcement():
     scheduled_val = request.form.get("scheduled_date", "")
     expiry_val = request.form.get("expiry_date", "")
 
-    # Set formats
     scheduled_date = scheduled_val if scheduled_val else None
     expiry_date = expiry_val if expiry_val else None
 
@@ -911,11 +1060,10 @@ def add_announcement():
         """, (title, description, category, priority, scheduled_date, expiry_date, author_id))
         conn.commit()
         
-        # Notify all faculty
         cur.execute("SELECT id FROM users")
         faculty_ids = [row[0] for row in cur.fetchall()]
         for fid in faculty_ids:
-            create_notification(fid, 'Announcement', f"New announcement posted: {title} ({category})")
+            create_notification(fid, 'Announcement', f"New notice: {title}")
             
         log_activity("Announcement Created", f"Posted announcement: {title}", username)
         flash("Announcement published successfully!", "success")
@@ -925,7 +1073,6 @@ def add_announcement():
     finally:
         cur.close()
         conn.close()
-        
     return redirect(url_for('announcements_dashboard'))
 
 @app.route("/announcements/delete/<int:id>")
@@ -945,7 +1092,6 @@ def delete_announcement(id):
     finally:
         cur.close()
         conn.close()
-        
     return redirect(url_for('announcements_dashboard'))
 
 # ==========================================
@@ -983,7 +1129,6 @@ def reports_hub():
     conn = get_connection()
     cur = conn.cursor()
     
-    # Compute aggregations for report
     cur.execute("SELECT COUNT(*) FROM students")
     total_students = cur.fetchone()[0]
     
@@ -994,7 +1139,6 @@ def reports_hub():
     avg_gpa_val = cur.fetchone()[0]
     avg_gpa = float(avg_gpa_val) if avg_gpa_val is not None else 0.00
 
-    # Fetch departments detailed stats for reporting
     cur.execute("""
         SELECT d.name, d.code, COUNT(s.id) AS student_count, 
                ROUND(COALESCE(AVG(s.gpa), 0), 2) AS avg_gpa
@@ -1005,7 +1149,6 @@ def reports_hub():
     """)
     departments = cur.fetchall()
 
-    # Fetch student lists for report table
     cur.execute("""
         SELECT s.id, s.name, s.email, d.name, s.gpa, s.status, s.age
         FROM students s
@@ -1018,7 +1161,6 @@ def reports_hub():
     conn.close()
     
     log_activity("Report Generated", "Compiled academic summary report.", username)
-    
     return render_template("reports.html", 
                            total_students=total_students, 
                            active_students=active_students, 
@@ -1029,10 +1171,291 @@ def reports_hub():
                            current_date=time.strftime('%B %d, %Y'))
 
 # ==========================================
-# ACCOUNT SETTINGS
+# FACULTY MANAGEMENT HUB (ADMIN ONLY)
 # ==========================================
-import re
+@app.route("/faculty")
+@login_required
+@admin_required
+def faculty_management():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Query all faculty requests and users
+    cur.execute("""
+        SELECT u.id, u.username, u.email, u.full_name, u.employee_id, d.name, u.designation, u.status, u.role, u.image_path, u.created_at, u.last_login
+        FROM users u
+        LEFT JOIN departments d ON u.department_id = d.id
+        ORDER BY u.status DESC, u.created_at DESC
+    """)
+    faculty_list = cur.fetchall()
+    
+    cur.execute("SELECT id, name FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template("faculty_mgmt.html", faculty_list=faculty_list, departments=departments)
 
+@app.route("/faculty/status/<int:fid>/<string:new_status>", methods=["POST"])
+@login_required
+@admin_required
+def change_faculty_status(fid, new_status):
+    admin_username = session['user']['username']
+    if new_status not in ['Active', 'Rejected', 'Suspended']:
+        flash("Invalid status request.", "danger")
+        return redirect(url_for('faculty_management'))
+        
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username, email FROM users WHERE id = %s", (fid,))
+    user_record = cur.fetchone()
+    
+    if not user_record:
+        cur.close()
+        conn.close()
+        flash("Faculty record not found.", "warning")
+        return redirect(url_for('faculty_management'))
+        
+    uname, uemail = user_record
+    cur.execute("UPDATE users SET status = %s WHERE id = %s", (new_status, fid))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Log actions
+    action_type = f"Faculty {new_status}"
+    log_activity(action_type, f"Account '{uname}' status changed to {new_status} by Admin.", admin_username)
+    
+    # Send Notification to HOD/Faculty members
+    create_notification(fid, 'Security', f"Your Faculty account status has been updated to {new_status}.")
+
+    flash(f"Faculty account status updated to {new_status}!", "success")
+    return redirect(url_for('faculty_management'))
+
+@app.route("/faculty/role/<int:fid>", methods=["POST"])
+@login_required
+@admin_required
+def change_faculty_role(fid):
+    admin_username = session['user']['username']
+    new_role = request.form["role"].strip()
+    
+    if new_role not in ['Admin', 'HOD', 'Faculty']:
+        flash("Invalid role selection.", "danger")
+        return redirect(url_for('faculty_management'))
+        
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, fid))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Faculty Role Altered", f"Faculty ID {fid} role updated to {new_role}.", admin_username)
+    create_notification(fid, 'System Alert', f"Your administrative role has been updated to {new_role}.")
+    
+    flash("Faculty role updated successfully.", "success")
+    return redirect(url_for('faculty_management'))
+
+@app.route("/faculty/reset-password/<int:fid>", methods=["POST"])
+@login_required
+@admin_required
+def reset_faculty_password(fid):
+    admin_username = session['user']['username']
+    new_password = request.form["new_password"].strip()
+    confirm_password = request.form["confirm_password"].strip()
+
+    if new_password != confirm_password:
+        flash("Passwords do not match.", "danger")
+        return redirect(url_for('faculty_management'))
+
+    is_valid_pwd, error_pwd = is_secure_password(new_password)
+    if not is_valid_pwd:
+        flash(error_pwd, "danger")
+        return redirect(url_for('faculty_management'))
+
+    hashed_pwd = generate_password_hash(new_password)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed_pwd, fid))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Faculty Password Reset", f"Administrative password override executed for user ID {fid}.", admin_username)
+    create_notification(fid, 'Security', "Your password was updated by the system administrator.")
+    
+    flash("Faculty password updated successfully.", "success")
+    return redirect(url_for('faculty_management'))
+
+@app.route("/faculty/delete/<int:fid>", methods=["POST"])
+@login_required
+@admin_required
+def delete_faculty(fid):
+    admin_username = session['user']['username']
+    
+    # Protect deleting oneself
+    if fid == session['user']['id']:
+        flash("Cannot delete your own admin account.", "warning")
+        return redirect(url_for('faculty_management'))
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE id = %s", (fid,))
+    res = cur.fetchone()
+    uname = res[0] if res else f"ID: {fid}"
+    
+    cur.execute("DELETE FROM users WHERE id = %s", (fid,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Faculty Account Deleted", f"Deleted faculty account: {uname} (ID: {fid})", admin_username)
+    flash(f"Faculty record '{uname}' has been deleted.", "danger")
+    return redirect(url_for('faculty_management'))
+
+# ==========================================
+# FACULTY PROFILE & SETTINGS PAGE
+# ==========================================
+@app.route("/profile")
+@login_required
+def settings_page():
+    username = session['user']['username']
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT u.username, u.email, u.full_name, u.employee_id, d.name, u.designation, u.image_path, u.role, u.status, u.created_at, u.last_login, u.department_id
+        FROM users u
+        LEFT JOIN departments d ON u.department_id = d.id
+        WHERE u.username = %s
+    """, (username,))
+    user_info = cur.fetchone()
+    
+    cur.execute("SELECT id, name FROM departments ORDER BY name")
+    departments = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template("faculty_profile.html", user_info=user_info, departments=departments)
+
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def update_profile():
+    current_username = session['user']['username']
+    current_uid = session['user']['id']
+    
+    full_name = request.form["full_name"].strip()
+    new_username = request.form["username"].strip()
+    new_email = request.form["email"].strip().lower()
+    designation = request.form["designation"].strip()
+    department_id = int(request.form["department_id"])
+
+    # Validate username
+    is_valid, error_msg = is_secure_username(new_username)
+    if not is_valid:
+        flash(error_msg, "danger")
+        return redirect(url_for('settings_page'))
+        
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        # Check duplicate username
+        cur.execute("SELECT COUNT(*) FROM users WHERE username = %s AND id != %s", (new_username, current_uid))
+        if cur.fetchone()[0] > 0:
+            flash(f"Username '{new_username}' is already taken.", "danger")
+            return redirect(url_for('settings_page'))
+
+        # Check duplicate email
+        cur.execute("SELECT COUNT(*) FROM users WHERE email = %s AND id != %s", (new_email, current_uid))
+        if cur.fetchone()[0] > 0:
+            flash(f"Email '{new_email}' is already taken.", "danger")
+            return redirect(url_for('settings_page'))
+
+        # Handle Profile photo upload
+        image_path = None
+        if 'profile_photo' in request.files:
+            file = request.files['profile_photo']
+            if file and file.filename != '' and allowed_file(file.filename):
+                filename = f"avatar_{current_uid}_{int(time.time())}_{secure_filename(file.filename)}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                image_path = f"static/uploads/{filename}"
+
+        if image_path:
+            cur.execute("""
+                UPDATE users 
+                SET username = %s, email = %s, full_name = %s, designation = %s, department_id = %s, image_path = %s
+                WHERE id = %s
+            """, (new_username, new_email, full_name, designation, department_id, image_path, current_uid))
+        else:
+            cur.execute("""
+                UPDATE users 
+                SET username = %s, email = %s, full_name = %s, designation = %s, department_id = %s
+                WHERE id = %s
+            """, (new_username, new_email, full_name, designation, department_id, current_uid))
+            
+        conn.commit()
+
+        # Update session
+        session['user']['username'] = new_username
+        session['user']['full_name'] = full_name
+
+        log_activity("Faculty Profile Updated", f"User updated profile details.", new_username)
+        create_notification(current_uid, 'Security', "Your profile details were updated.")
+        flash("Profile updated successfully!", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Failed to update profile: {str(e)}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for('settings_page'))
+
+@app.route("/profile/change-password", methods=["POST"])
+@login_required
+def change_password():
+    username = session['user']['username']
+    uid = session['user']['id']
+    current_password = request.form["current_password"].strip()
+    new_password = request.form["new_password"].strip()
+    confirm_password = request.form["confirm_password"].strip()
+
+    if new_password != confirm_password:
+        flash("New passwords do not match.", "danger")
+        return redirect(url_for('settings_page'))
+
+    is_valid_pwd, error_pwd = is_secure_password(new_password)
+    if not is_valid_pwd:
+        flash(error_pwd, "danger")
+        return redirect(url_for('settings_page'))
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT password_hash FROM users WHERE id = %s", (uid,))
+    record = cur.fetchone()
+    
+    if not record or not check_password_hash(record[0], current_password):
+        cur.close()
+        conn.close()
+        flash("Incorrect current password.", "danger")
+        return redirect(url_for('settings_page'))
+
+    # Update
+    new_password_hash = generate_password_hash(new_password)
+    cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_password_hash, uid))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Password Changed", f"User changed password.", username)
+    create_notification(uid, 'Security', "Your password was updated.")
+    
+    flash("Password updated successfully!", "success")
+    return redirect(url_for('settings_page'))
+
+# ==========================================
+# SECURITY UTILITIES
+# ==========================================
 def is_secure_password(password):
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
@@ -1052,96 +1475,6 @@ def is_secure_username(username):
     if not re.match(r"^[a-zA-Z0-9_\-]+$", username):
         return False, "Username can only contain alphanumeric characters, underscores, and hyphens."
     return True, ""
-
-@app.route("/settings")
-@login_required
-def settings_page():
-    username = session['user']['username']
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT username, email FROM users WHERE username = %s", (username,))
-    user_info = cur.fetchone()
-    cur.close()
-    conn.close()
-    return render_template("settings.html", user_info=user_info)
-
-@app.route("/settings/update-profile", methods=["POST"])
-@login_required
-def update_profile():
-    new_username = request.form["username"].strip()
-    new_email = request.form.get("email", "").strip()
-    
-    # Validate username
-    is_valid, error_msg = is_secure_username(new_username)
-    if not is_valid:
-        flash(error_msg, "danger")
-        return redirect(url_for('settings_page'))
-        
-    current_id = session['user']['id']
-    
-    conn = get_connection()
-    cur = conn.cursor()
-    
-    # Check duplicate username
-    cur.execute("SELECT COUNT(*) FROM users WHERE username = %s AND id != %s", (new_username, current_id))
-    if cur.fetchone()[0] > 0:
-        cur.close()
-        conn.close()
-        flash(f"Username '{new_username}' is already taken.", "danger")
-        return redirect(url_for('settings_page'))
-        
-    # Update
-    cur.execute("UPDATE users SET username = %s, email = %s WHERE id = %s", (new_username, new_email, current_id))
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    # Update session
-    session['user']['username'] = new_username
-    
-    log_activity("Faculty Profile Updated", f"User ID {current_id} changed username to '{new_username}'.", new_username)
-    flash("Profile updated successfully!", "success")
-    return redirect(url_for('settings_page'))
-
-@app.route("/settings/change-password", methods=["POST"])
-@login_required
-def change_password():
-    username = session['user']['username']
-    current_password = request.form["current_password"].strip()
-    new_password = request.form["new_password"].strip()
-    confirm_password = request.form["confirm_password"].strip()
-
-    if new_password != confirm_password:
-        flash("New passwords do not match.", "danger")
-        return redirect(url_for('settings_page'))
-
-    # Validate secure password rules
-    is_valid, error_msg = is_secure_password(new_password)
-    if not is_valid:
-        flash(error_msg, "danger")
-        return redirect(url_for('settings_page'))
-
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT password_hash FROM users WHERE username = %s", (username,))
-    record = cur.fetchone()
-    
-    if not record or not check_password_hash(record[0], current_password):
-        cur.close()
-        conn.close()
-        flash("Incorrect current password.", "danger")
-        return redirect(url_for('settings_page'))
-
-    # Update to new password
-    new_password_hash = generate_password_hash(new_password)
-    cur.execute("UPDATE users SET password_hash = %s WHERE username = %s", (new_password_hash, username))
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    log_activity("Password Changed", f"User '{username}' changed their password.", username)
-    flash("Password updated successfully!", "success")
-    return redirect(url_for('settings_page'))
 
 # ==========================================
 # MAIN

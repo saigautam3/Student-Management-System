@@ -1,38 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Portal | Management System</title>
-    
+
     <!-- Google Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    
+
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body class="light-theme">
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="toast {{ category }}">
-                        <span class="material-icons-round">
-                            {% if category == 'success' %}check_circle
-                            {% elif category == 'info' %}info
-                            {% else %}error{% endif %}
-                        </span>
-                        <div class="toast-content">{{ message }}</div>
-                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="toast {{ category }}">
+            <span class="material-icons-round">
+                {% if category == 'success' %}check_circle
+                {% elif category == 'info' %}info
+                {% else %}error{% endif %}
+            </span>
+            <div class="toast-content">{{ message }}</div>
+            <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+        </div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
     </div>
 
@@ -48,7 +50,7 @@
                     <p class="subtitle">Academic Records & Analytics</p>
                 </div>
             </div>
-            
+
             <div class="nav-controls">
                 <button class="theme-toggle-btn" id="themeToggle" title="Toggle Theme">
                     <span class="material-icons-round" id="themeIcon">dark_mode</span>
@@ -133,12 +135,13 @@
                     <h2>📋 Student Registry</h2>
                     <span class="registry-count">{{ students|length }} records found</span>
                 </div>
-                
+
                 <div class="toolbar-actions">
                     <!-- Search Input -->
                     <div class="search-box">
                         <span class="material-icons-round search-icon">search</span>
-                        <input type="text" id="searchInput" placeholder="Search student name, email, department..." value="{{ search }}">
+                        <input type="text" id="searchInput" placeholder="Search student name, email, department..."
+                            value="{{ search }}">
                     </div>
 
                     <!-- Department Filter -->
@@ -146,7 +149,7 @@
                         <select id="departmentFilter" onchange="filterDepartment()">
                             <option value="">All Departments</option>
                             {% for dept in departments %}
-                            <option value="{{ dept[0] }}" {% if selected_department == dept[0] %}selected{% endif %}>
+                            <option value="{{ dept[0] }}" {% if selected_department==dept[0] %}selected{% endif %}>
                                 {{ dept[0] }}
                             </option>
                             {% endfor %}
@@ -172,18 +175,25 @@
                 <table id="studentTable">
                     <thead>
                         <tr>
-                            <th class="sortable" onclick="sortTable(0)">SL No <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(1)">Name <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(2)">Email <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(3)">Age <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(4)">Department <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(5)">GPA <span class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(6)">Status <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(0)">SL No <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(1)">Name <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(2)">Email <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(3)">Age <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(4)">Department <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(5)">GPA <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(6)">Status <span
+                                    class="sort-icon material-icons-round">unfold_more</span></th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                    {% if students %}
+                        {% if students %}
                         {% for student in students %}
                         <tr>
                             <td>{{ loop.index }}</td>
@@ -201,7 +211,8 @@
                                 <span class="dept-badge">{{ student[3] }}</span>
                             </td>
                             <td>
-                                <span class="gpa-badge {% if student[5]|float >= 3.5 %}gpa-excellent{% elif student[5]|float >= 3.0 %}gpa-good{% else %}gpa-average{% endif %}">
+                                <span
+                                    class="gpa-badge {% if student[5]|float >= 3.5 %}gpa-excellent{% elif student[5]|float >= 3.0 %}gpa-good{% else %}gpa-average{% endif %}">
                                     {{ "%.2f"|format(student[5]|float) }}
                                 </span>
                             </td>
@@ -212,22 +223,21 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="action-btn edit-btn" 
-                                            onclick='openEditModal({id: "{{ student[0] }}", name: "{{ student[1]|escape }}", age: "{{ student[2] }}", department: "{{ student[3]|escape }}", email: "{{ student[4]|escape }}", gpa: "{{ student[5] }}", status: "{{ student[6] }}"})'
-                                            title="Edit Student">
+                                    <button class="action-btn edit-btn"
+                                        onclick='openEditModal({id: "{{ student[0] }}", name: "{{ student[1]|escape }}", age: "{{ student[2] }}", department: "{{ student[3]|escape }}", email: "{{ student[4]|escape }}", gpa: "{{ student[5] }}", status: "{{ student[6] }}"})'
+                                        title="Edit Student">
                                         <span class="material-icons-round">edit</span>
                                     </button>
-                                    <a href="/delete/{{ student[0] }}" 
-                                       class="action-btn delete-btn" 
-                                       onclick="return confirm('Are you sure you want to delete {{ student[1] }}?')"
-                                       title="Delete Student">
+                                    <a href="/delete/{{ student[0] }}" class="action-btn delete-btn"
+                                        onclick="return confirm('Are you sure you want to delete {{ student[1] }}?')"
+                                        title="Delete Student">
                                         <span class="material-icons-round">delete</span>
                                     </a>
                                 </div>
                             </td>
                         </tr>
                         {% endfor %}
-                    {% else %}
+                        {% else %}
                         <tr>
                             <td colspan="8">
                                 <div class="empty-state">
@@ -237,7 +247,7 @@
                                 </div>
                             </td>
                         </tr>
-                    {% endif %}
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -253,7 +263,7 @@
                 <h3 id="modalTitle">Add New Student</h3>
                 <button class="close-modal-btn" id="closeModalBtn">&times;</button>
             </div>
-            
+
             <form id="studentForm" action="/add" method="POST">
                 <div class="form-grid">
                     <div class="form-group">
@@ -263,7 +273,8 @@
 
                     <div class="form-group">
                         <label for="studentEmail">Email Address</label>
-                        <input type="email" id="studentEmail" name="email" placeholder="johndoe@university.edu" required>
+                        <input type="email" id="studentEmail" name="email" placeholder="johndoe@university.edu"
+                            required>
                     </div>
 
                     <div class="form-group">
@@ -272,8 +283,9 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="studentGpa">GPA (0.00 - 4.00)</label>
-                        <input type="number" id="studentGpa" name="gpa" min="0" max="4" step="0.01" placeholder="3.85" required>
+                        <label for="studentGpa">GPA (0.00 - 10.00)</label>
+                        <input type="number" id="studentGpa" name="gpa" min="0" max="4" step="0.01" placeholder="3.85"
+                            required>
                     </div>
 
                     <div class="form-group">
@@ -332,4 +344,5 @@
     <!-- Custom Script -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
+
 </html>

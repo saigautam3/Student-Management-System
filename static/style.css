@@ -329,7 +329,7 @@ body {
 
 .input-icon-wrapper input {
     width: 100%;
-    padding: 14px 16px 14px 46px;
+    padding: 14px 16px 14px 46px !important;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     background: rgba(255, 255, 255, 0.05);
@@ -528,7 +528,7 @@ body {
 }
 
 .filter-input-wrapper input {
-    padding-left: 36px;
+    padding-left: 36px !important;
 }
 
 .filter-group input, .filter-group select {

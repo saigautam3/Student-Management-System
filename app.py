@@ -54,7 +54,7 @@ def login():
                 'id': user_record[0],
                 'username': user_record[1]
             }
-            log_activity("Admin Login", f"User '{username}' logged in successfully.")
+            log_activity("Faculty Login", f"User '{username}' logged in successfully.")
             flash("Welcome back! Logged in successfully.", "success")
             return redirect(url_for('home'))
         else:
@@ -68,7 +68,7 @@ def logout():
     if 'user' in session:
         username = session['user']['username']
         session.pop('user', None)
-        log_activity("Admin Logout", f"User '{username}' logged out.")
+        log_activity("Faculty Logout", f"User '{username}' logged out.")
         flash("You have been logged out.", "info")
     return redirect(url_for('login'))
 
@@ -558,6 +558,122 @@ def delete_department(id):
         cur.close()
         conn.close()
     return redirect(url_for('departments_dashboard'))
+
+# ==========================================
+# ACCOUNT SETTINGS
+# ==========================================
+import re
+
+def is_secure_password(password):
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long."
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter."
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter."
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one digit."
+    if not re.search(r"[@$!%*?&#]", password):
+        return False, "Password must contain at least one special character (@$!%*?&#)."
+    return True, ""
+
+def is_secure_username(username):
+    if len(username) < 3:
+        return False, "Username must be at least 3 characters long."
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", username):
+        return False, "Username can only contain alphanumeric characters, underscores, and hyphens."
+    return True, ""
+
+@app.route("/settings")
+@login_required
+def settings_page():
+    username = session['user']['username']
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username, email FROM users WHERE username = %s", (username,))
+    user_info = cur.fetchone()
+    cur.close()
+    conn.close()
+    return render_template("settings.html", user_info=user_info)
+
+@app.route("/settings/update-profile", methods=["POST"])
+@login_required
+def update_profile():
+    new_username = request.form["username"].strip()
+    new_email = request.form.get("email", "").strip()
+    
+    # Validate username
+    is_valid, error_msg = is_secure_username(new_username)
+    if not is_valid:
+        flash(error_msg, "danger")
+        return redirect(url_for('settings_page'))
+        
+    current_id = session['user']['id']
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Check duplicate username
+    cur.execute("SELECT COUNT(*) FROM users WHERE username = %s AND id != %s", (new_username, current_id))
+    if cur.fetchone()[0] > 0:
+        cur.close()
+        conn.close()
+        flash(f"Username '{new_username}' is already taken.", "danger")
+        return redirect(url_for('settings_page'))
+        
+    # Update
+    cur.execute("UPDATE users SET username = %s, email = %s WHERE id = %s", (new_username, new_email, current_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    # Update session
+    session['user']['username'] = new_username
+    
+    log_activity("Faculty Profile Updated", f"User ID {current_id} changed username to '{new_username}'.")
+    flash("Profile updated successfully!", "success")
+    return redirect(url_for('settings_page'))
+
+@app.route("/settings/change-password", methods=["POST"])
+@login_required
+def change_password():
+    current_password = request.form["current_password"].strip()
+    new_password = request.form["new_password"].strip()
+    confirm_password = request.form["confirm_password"].strip()
+
+    if new_password != confirm_password:
+        flash("New passwords do not match.", "danger")
+        return redirect(url_for('settings_page'))
+
+    # Validate secure password rules
+    is_valid, error_msg = is_secure_password(new_password)
+    if not is_valid:
+        flash(error_msg, "danger")
+        return redirect(url_for('settings_page'))
+
+    username = session['user']['username']
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT password_hash FROM users WHERE username = %s", (username,))
+    record = cur.fetchone()
+    
+    if not record or not check_password_hash(record[0], current_password):
+        cur.close()
+        conn.close()
+        flash("Incorrect current password.", "danger")
+        return redirect(url_for('settings_page'))
+
+    # Update to new password
+    new_password_hash = generate_password_hash(new_password)
+    cur.execute("UPDATE users SET password_hash = %s WHERE username = %s", (new_password_hash, username))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    log_activity("Password Changed", f"User '{username}' changed their password.")
+    flash("Password updated successfully!", "success")
+    return redirect(url_for('settings_page'))
 
 # ==========================================
 # MAIN

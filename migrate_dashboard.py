@@ -20,17 +20,17 @@ def run_migration():
         """)
         print("- 'users' table created or already exists.")
 
-        # 2. Insert default admin user if none exists
-        cur.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+        # 2. Insert default faculty user if none exists
+        cur.execute("SELECT COUNT(*) FROM users WHERE username = 'faculty'")
         if cur.fetchone()[0] == 0:
-            hashed_pwd = generate_password_hash('adminpassword')
+            hashed_pwd = generate_password_hash('facultypassword')
             cur.execute("""
                 INSERT INTO users (username, password_hash, email)
                 VALUES (%s, %s, %s)
-            """, ('admin', hashed_pwd, 'admin@university.edu'))
-            print("- Default admin user ('admin' / 'adminpassword') created.")
+            """, ('faculty', hashed_pwd, 'faculty@university.edu'))
+            print("- Default faculty user ('faculty' / 'facultypassword') created.")
         else:
-            print("- Default admin user already exists.")
+            print("- Default faculty user already exists.")
 
         # 3. Create departments table
         cur.execute("""

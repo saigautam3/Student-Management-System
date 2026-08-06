@@ -739,6 +739,21 @@ table tbody tr.row-selected {
     color: var(--info-text);
 }
 
+.priority-high {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+}
+
+.priority-medium {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+.priority-low {
+    background: var(--info-bg);
+    color: var(--info-text);
+}
+
 .gpa-badge {
     padding: 5px 10px;
     border-radius: var(--radius-sm);

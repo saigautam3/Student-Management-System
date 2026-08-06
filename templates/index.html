@@ -375,7 +375,7 @@
                             {% if announcements %}
                                 {% for notice in announcements %}
                                 <div style="padding:12px 15px; border-radius:var(--radius-md); background: rgba(0,0,0,0.02); border:1px solid var(--border-color); position:relative;">
-                                    <span class="status-badge" style="position:absolute; right:15px; top:12px; font-size:9px; background: {% if notice[4] == 'High' %}var(--danger-bg){% elif notice[4] == 'Medium' %}var(--warning-bg){% else %}var(--info-bg){% endif %}; color: {% if notice[4] == 'High' %}var(--danger-text){% elif notice[4] == 'Medium' %}var(--warning-text){% else %}var(--info-text){% endif %}; padding: 3px 8px;">{{ notice[4] }}</span>
+                                    <span class="status-badge priority-{{ notice[4]|lower }}" style="position:absolute; right:15px; top:12px; font-size:9px; padding: 3px 8px;">{{ notice[4] }}</span>
                                     <h4 style="font-size:13px; font-weight:700; width:80%;">{{ notice[1] }}</h4>
                                     <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">{{ notice[3] }} | {{ notice[5].strftime('%m-%d %H:%M') }}</p>
                                     <p style="font-size:12px; color:var(--text-main); margin-top:6px; line-height:1.4;">{{ notice[2] }}</p>

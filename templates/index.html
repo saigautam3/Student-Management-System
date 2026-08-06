@@ -1,255 +1,459 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Portal | Management System</title>
-
+    <title>StudentSphere | Enterprise ERP Portal</title>
+    
     <!-- Google Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-
+    
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body class="light-theme">
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer">
         {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="toast {{ category }}">
-            <span class="material-icons-round">
-                {% if category == 'success' %}check_circle
-                {% elif category == 'info' %}info
-                {% else %}error{% endif %}
-            </span>
-            <div class="toast-content">{{ message }}</div>
-            <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
-        </div>
-        {% endfor %}
-        {% endif %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
         {% endwith %}
     </div>
 
+    <!-- Data Bridges for JavaScript -->
+    <script id="analytics-data-bridge" type="application/json">{{ analytics_data|tojson }}</script>
+
     <div class="app-layout">
         <!-- ==========================
-                Sidebar / Top Header
+                Sidebar Navigation
         =========================== -->
-        <header class="navbar">
+        <aside class="sidebar">
             <div class="brand">
                 <span class="material-icons-round brand-logo">school</span>
                 <div>
                     <h1>StudentSphere</h1>
-                    <p class="subtitle">Academic Records & Analytics</p>
+                    <p class="subtitle">Academic ERP</p>
                 </div>
             </div>
-
-            <div class="nav-controls">
-                <button class="theme-toggle-btn" id="themeToggle" title="Toggle Theme">
-                    <span class="material-icons-round" id="themeIcon">dark_mode</span>
-                </button>
-            </div>
-        </header>
-
-        <!-- ==========================
-                Stats Dashboard
-        =========================== -->
-        <section class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-info">
-                    <span class="stat-label">Total Students</span>
-                    <h2 class="stat-value" id="totalStudentsCount">{{ total_students }}</h2>
-                </div>
-                <div class="stat-icon-wrapper students-color">
+            
+            <nav class="sidebar-menu">
+                <a href="#dashboard-section" class="menu-item active" id="menu-dashboard">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#registry-section" class="menu-item" id="menu-registry">
                     <span class="material-icons-round">groups</span>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <span class="stat-label">Active Enrolled</span>
-                    <h2 class="stat-value">{{ active_students }}</h2>
-                </div>
-                <div class="stat-icon-wrapper active-color">
-                    <span class="material-icons-round">how_to_reg</span>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <span class="stat-label">Average GPA</span>
-                    <h2 class="stat-value">{{ avg_gpa }}</h2>
-                </div>
-                <div class="stat-icon-wrapper gpa-color">
-                    <span class="material-icons-round">stars</span>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <span class="stat-label">Departments</span>
-                    <h2 class="stat-value">{{ total_departments }}</h2>
-                </div>
-                <div class="stat-icon-wrapper dept-color">
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item">
                     <span class="material-icons-round">domain</span>
-                </div>
+                    <span>Departments</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <p class="user-info">Logged in as: <br><strong>{{ session['user']['username'] }}</strong></p>
             </div>
-        </section>
+        </aside>
 
         <!-- ==========================
-                Analytics Charts
+                Main Content Frame
         =========================== -->
-        <section class="analytics-section">
-            <div class="analytics-card">
-                <div class="analytics-header">
-                    <h3>Student Distribution by Department</h3>
+        <main class="main-content">
+            
+            <!-- Navbar Header -->
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2 id="page-title-label">Dashboard Overview</h2>
+                    <p class="subtitle">Real-time Metrics & Insights</p>
                 </div>
-                <div class="chart-container">
-                    <canvas id="deptDistributionChart"></canvas>
+                
+                <div class="nav-controls">
+                    <button class="theme-toggle-btn" id="themeToggle" title="Toggle Theme">
+                        <span class="material-icons-round" id="themeIcon">dark_mode</span>
+                    </button>
                 </div>
-            </div>
+            </header>
 
-            <div class="analytics-card">
-                <div class="analytics-header">
-                    <h3>Average GPA by Department</h3>
-                </div>
-                <div class="chart-container">
-                    <canvas id="deptGpaChart"></canvas>
-                </div>
-            </div>
-        </section>
-
-        <!-- ==========================
-                Student Records List
-        =========================== -->
-        <main class="main-card">
-            <div class="table-toolbar">
-                <div class="toolbar-title">
-                    <h2>📋 Student Registry</h2>
-                    <span class="registry-count">{{ students|length }} records found</span>
-                </div>
-
-                <div class="toolbar-actions">
-                    <!-- Search Input -->
-                    <div class="search-box">
-                        <span class="material-icons-round search-icon">search</span>
-                        <input type="text" id="searchInput" placeholder="Search student name, email, department..."
-                            value="{{ search }}">
+            <!-- Dashboard Section -->
+            <div id="dashboard-section" class="tab-content active">
+                
+                <!-- Statistics Grid -->
+                <section class="stats-grid">
+                    <!-- Total Students -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Total Students</span>
+                            <h2 class="stat-value">{{ total_students }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper students-color">
+                            <span class="material-icons-round">groups</span>
+                        </div>
                     </div>
 
-                    <!-- Department Filter -->
-                    <div class="select-wrapper">
-                        <select id="departmentFilter" onchange="filterDepartment()">
-                            <option value="">All Departments</option>
-                            {% for dept in departments %}
-                            <option value="{{ dept[0] }}" {% if selected_department==dept[0] %}selected{% endif %}>
-                                {{ dept[0] }}
-                            </option>
+                    <!-- Active Enrolled -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Active / Inactive</span>
+                            <h2 class="stat-value">{{ active_students }} <span style="font-size: 1rem; color: var(--text-muted); font-weight: normal;">/ {{ inactive_students }}</span></h2>
+                        </div>
+                        <div class="stat-icon-wrapper active-color">
+                            <span class="material-icons-round">how_to_reg</span>
+                        </div>
+                    </div>
+
+                    <!-- Average GPA -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Average GPA</span>
+                            <h2 class="stat-value">{{ avg_gpa }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper gpa-color">
+                            <span class="material-icons-round">stars</span>
+                        </div>
+                    </div>
+
+                    <!-- Top Performer -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Top Performer</span>
+                            <h2 class="stat-value" style="font-size: 1.15rem; margin-top: 5px;">{{ top_performer }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper active-color" style="background: rgba(16, 185, 129, 0.1); color: var(--success)">
+                            <span class="material-icons-round">emoji_events</span>
+                        </div>
+                    </div>
+
+                    <!-- Lowest GPA -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Lowest GPA</span>
+                            <h2 class="stat-value" style="font-size: 1.15rem; margin-top: 5px;">{{ lowest_gpa }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper dept-color" style="background: rgba(239, 68, 68, 0.1); color: var(--danger)">
+                            <span class="material-icons-round">trending_down</span>
+                        </div>
+                    </div>
+
+                    <!-- Recently Added -->
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Recently Added</span>
+                            <h2 class="stat-value" style="font-size: 1.15rem; margin-top: 5px;">{{ recently_added }}</h2>
+                        </div>
+                        <div class="stat-icon-wrapper dept-color">
+                            <span class="material-icons-round">person_add</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Charts Analytics Grid -->
+                <section class="analytics-grid">
+                    <!-- Row 1: Dept Distribution & Avg GPA -->
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>Department Distribution</h3></div>
+                        <div class="chart-container"><canvas id="deptDistributionChart"></canvas></div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>Average GPA by Department</h3></div>
+                        <div class="chart-container"><canvas id="deptGpaChart"></canvas></div>
+                    </div>
+
+                    <!-- Row 2: GPA Distribution & Status Distribution -->
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>GPA Range Distribution</h3></div>
+                        <div class="chart-container"><canvas id="gpaDistributionChart"></canvas></div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>Status Distribution</h3></div>
+                        <div class="chart-container"><canvas id="statusDistributionChart"></canvas></div>
+                    </div>
+
+                    <!-- Row 3: Age Distribution & Monthly Growth -->
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>Age Distribution</h3></div>
+                        <div class="chart-container"><canvas id="ageDistributionChart"></canvas></div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="analytics-header"><h3>Admissions Growth Trend</h3></div>
+                        <div class="chart-container"><canvas id="growthTrendChart"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- Recent Activity Log section -->
+                <section class="main-card">
+                    <div class="analytics-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px;">
+                        <h3 style="display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons-round" style="color: var(--primary)">history</span>
+                            <span>System Activity Log</span>
+                        </h3>
+                    </div>
+                    {% if activities %}
+                        <div class="activity-timeline-horizontal">
+                            {% for act in activities %}
+                            <div class="timeline-item-h">
+                                <div class="timeline-meta-h">
+                                    <span class="timeline-badge-h"></span>
+                                    <span class="timeline-time-h">{{ act[2].strftime('%m-%d %H:%M') }}</span>
+                                </div>
+                                <div class="timeline-body-h">
+                                    <strong>{{ act[0] }}</strong>
+                                    <p>{{ act[1] }}</p>
+                                </div>
+                            </div>
                             {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Export Button -->
-                    <button class="secondary-btn" id="exportBtn" title="Export to CSV">
-                        <span class="material-icons-round">download</span>
-                        <span>Export</span>
-                    </button>
-
-                    <!-- Add Student Button -->
-                    <button class="primary-btn" id="openAddModalBtn">
-                        <span class="material-icons-round">add</span>
-                        <span>Add Student</span>
-                    </button>
-                </div>
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <span class="material-icons-round">history</span>
+                            <p>No system activity logged yet.</p>
+                        </div>
+                    {% endif %}
+                </section>
             </div>
 
-            <!-- Table Container -->
-            <div class="table-container">
-                <table id="studentTable">
-                    <thead>
-                        <tr>
-                            <th class="sortable" onclick="sortTable(0)">SL No <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(1)">Name <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(2)">Email <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(3)">Age <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(4)">Department <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(5)">GPA <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th class="sortable" onclick="sortTable(6)">Status <span
-                                    class="sort-icon material-icons-round">unfold_more</span></th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if students %}
-                        {% for student in students %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>
-                                <div class="student-profile">
-                                    <div class="avatar">{{ student[1][:1]|upper }}</div>
-                                    <span class="student-name">{{ student[1] }}</span>
+            <!-- Registry Section -->
+            <div id="registry-section" class="tab-content">
+                <main class="main-card">
+                    
+                    <!-- Advanced Filters Toolbar -->
+                    <div class="filters-toolbar">
+                        <form id="filtersForm" method="GET" action="/">
+                            <!-- Store current anchor -->
+                            <input type="hidden" name="filter_anchor" value="registry-section">
+                            
+                            <div class="filters-grid">
+                                <!-- Search -->
+                                <div class="filter-group">
+                                    <label for="regSearchInput">Search Name</label>
+                                    <div class="filter-input-wrapper">
+                                        <span class="material-icons-round">search</span>
+                                        <input type="text" id="regSearchInput" name="search" placeholder="Type name..." value="{{ search }}">
+                                    </div>
                                 </div>
-                            </td>
-                            <td>
-                                <a href="mailto:{{ student[4] }}" class="email-link">{{ student[4] or 'N/A' }}</a>
-                            </td>
-                            <td>{{ student[2] }}</td>
-                            <td>
-                                <span class="dept-badge">{{ student[3] }}</span>
-                            </td>
-                            <td>
-                                <span
-                                    class="gpa-badge {% if student[5]|float >= 8.5 %}gpa-excellent{% elif student[5]|float >= 7.5 %}gpa-good{% else %}gpa-average{% endif %}">
-                                    {{ "%.2f"|format(student[5]|float) }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="status-badge status-{{ student[6]|lower }}">
-                                    {{ student[6] or 'Active' }}
-                                </span>
-                            </td>
-                            <td>
-                                <div class="action-buttons">
-                                    <button class="action-btn edit-btn"
-                                        onclick='openEditModal({id: "{{ student[0] }}", name: "{{ student[1]|escape }}", age: "{{ student[2] }}", department: "{{ student[3]|escape }}", email: "{{ student[4]|escape }}", gpa: "{{ student[5] }}", status: "{{ student[6] }}"})'
-                                        title="Edit Student">
-                                        <span class="material-icons-round">edit</span>
-                                    </button>
-                                    <a href="/delete/{{ student[0] }}" class="action-btn delete-btn"
-                                        onclick="return confirm('Are you sure you want to delete {{ student[1] }}?')"
-                                        title="Delete Student">
-                                        <span class="material-icons-round">delete</span>
-                                    </a>
+
+                                <!-- Department -->
+                                <div class="filter-group">
+                                    <label for="regDeptFilter">Department</label>
+                                    <select id="regDeptFilter" name="department">
+                                        <option value="">All Departments</option>
+                                        {% for dept in departments %}
+                                        <option value="{{ dept[0] }}" {% if selected_department|string == dept[0]|string %}selected{% endif %}>
+                                            {{ dept[1] }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        {% else %}
-                        <tr>
-                            <td colspan="8">
-                                <div class="empty-state">
-                                    <span class="material-icons-round">face</span>
-                                    <h3>No Students Found</h3>
-                                    <p>Try altering your search filters or add a new student record.</p>
+
+                                <!-- Status -->
+                                <div class="filter-group">
+                                    <label for="regStatusFilter">Enrollment Status</label>
+                                    <select id="regStatusFilter" name="status">
+                                        <option value="">All Statuses</option>
+                                        <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active</option>
+                                        <option value="Inactive" {% if selected_status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                                        <option value="Graduated" {% if selected_status == 'Graduated' %}selected{% endif %}>Graduated</option>
+                                    </select>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
+
+                                <!-- Age -->
+                                <div class="filter-group">
+                                    <label for="regAgeFilter">Age Filter</label>
+                                    <input type="number" id="regAgeFilter" name="age" placeholder="Exact age" value="{{ age_filter }}">
+                                </div>
+
+                                <!-- GPA Min -->
+                                <div class="filter-group">
+                                    <label for="gpaMinFilter">Min GPA</label>
+                                    <input type="number" step="0.1" min="0" max="10" id="gpaMinFilter" name="gpa_min" placeholder="0.0" value="{{ gpa_min }}">
+                                </div>
+
+                                <!-- GPA Max -->
+                                <div class="filter-group">
+                                    <label for="gpaMaxFilter">Max GPA</label>
+                                    <input type="number" step="0.1" min="0" max="10" id="gpaMaxFilter" name="gpa_max" placeholder="10.0" value="{{ gpa_max }}">
+                                </div>
+                            </div>
+
+                            <div class="filter-actions-row">
+                                <button type="submit" class="primary-btn">
+                                    <span class="material-icons-round">filter_list</span>
+                                    <span>Apply Filters</span>
+                                </button>
+                                <a href="/#registry-section" class="secondary-btn" onclick="clearAllFilters(event)">
+                                    <span class="material-icons-round">clear_all</span>
+                                    <span>Clear Filters</span>
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Toolbar Actions -->
+                    <div class="table-toolbar" style="margin-top: 25px;">
+                        <div class="toolbar-title">
+                            <h3>📋 Student Registry List</h3>
+                            <span class="registry-count" id="registryCountLabel">{{ students|length }} records found</span>
+                        </div>
+                        
+                        <div class="toolbar-actions">
+                            <!-- Export Document Dropdown -->
+                            <div class="dropdown">
+                                <button class="secondary-btn" id="exportDropdownBtn">
+                                    <span class="material-icons-round">download</span>
+                                    <span>Export Options</span>
+                                </button>
+                                <div class="dropdown-content">
+                                    <button onclick="exportTableToCSV()"><span class="material-icons-round">grid_on</span> CSV Spreadsheet</button>
+                                    <button onclick="exportTableToExcel()"><span class="material-icons-round">table_chart</span> Excel Spreadsheet</button>
+                                    <button onclick="exportTableToPDF()"><span class="material-icons-round">picture_as_pdf</span> PDF Document</button>
+                                    <button onclick="printReport()"><span class="material-icons-round">print</span> Print Report</button>
+                                </div>
+                            </div>
+
+                            <!-- Add Student Button -->
+                            <button class="primary-btn" id="openAddModalBtn">
+                                <span class="material-icons-round">add</span>
+                                <span>Add Student</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Operations Toolbar -->
+                    <form id="bulkForm" action="/bulk" method="POST">
+                        <div class="bulk-toolbar" id="bulkToolbar">
+                            <span class="bulk-selected-label"><strong id="bulkSelectedCount">0</strong> students selected</span>
+                            <div class="bulk-actions-wrapper">
+                                <select name="status_value" id="bulkStatusSelect" class="secondary-btn" style="padding: 6px 12px; background: var(--bg-card);">
+                                    <option value="">Update Status...</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Inactive">Inactive</option>
+                                    <option value="Graduated">Graduated</option>
+                                </select>
+                                <button type="button" class="secondary-btn" onclick="submitBulkAction('status_update')">Update Status</button>
+                                <button type="button" class="secondary-btn" onclick="bulkExportCSV()">Bulk CSV</button>
+                                <button type="button" class="action-btn delete-btn" onclick="submitBulkAction('delete')" style="padding: 10px 14px; border-radius: var(--radius-sm); border: none;">
+                                    <span class="material-icons-round" style="font-size:18px;">delete</span>
+                                </button>
+                            </div>
+                            <input type="hidden" name="action" id="bulkActionInput" value="">
+                        </div>
+
+                        <!-- Table Container -->
+                        <div class="table-container">
+                            <table id="studentTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 45px;"><input type="checkbox" id="selectAllCheckbox"></th>
+                                        <th class="sortable" onclick="sortTable(0)">SL No <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(1)">Name <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(2)">Email <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(3)">Age <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(4)">Department <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(5)">GPA <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th class="sortable" onclick="sortTable(6)">Status <span class="sort-icon material-icons-round">unfold_more</span></th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentTableBody">
+                                {% if students %}
+                                    {% for student in students %}
+                                    <tr data-student-id="{{ student[0] }}">
+                                        <td><input type="checkbox" name="student_ids" value="{{ student[0] }}" class="row-checkbox"></td>
+                                        <td>{{ loop.index }}</td>
+                                        <td>
+                                            <div class="student-profile" onclick="window.location.href='/student/{{ student[0] }}'">
+                                                <div class="avatar-container">
+                                                    {% if student[7] %}
+                                                        <img src="{{ url_for('static', filename=student[7].replace('static/', '')) }}" alt="{{ student[1] }}" class="table-avatar-img">
+                                                    {% else %}
+                                                        <div class="avatar">{{ student[1][:1]|upper }}</div>
+                                                    {% endif %}
+                                                </div>
+                                                <span class="student-name clickable">{{ student[1] }}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <a href="mailto:{{ student[4] }}" class="email-link">{{ student[4] or 'N/A' }}</a>
+                                        </td>
+                                        <td>{{ student[2] }}</td>
+                                        <td>
+                                            <span class="dept-badge">{{ student[3] or 'Unassigned' }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="gpa-badge {% if student[5]|float >= 8.5 %}gpa-excellent{% elif student[5]|float >= 7.5 %}gpa-good{% else %}gpa-average{% endif %}">
+                                                {{ "%.2f"|format(student[5]|float) }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge status-{{ student[6]|lower }}">
+                                                {{ student[6] or 'Active' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <a href="/student/{{ student[0] }}" class="action-btn edit-btn" title="View Profile" style="color: var(--primary);">
+                                                    <span class="material-icons-round">visibility</span>
+                                                </a>
+                                                <button type="button" class="action-btn edit-btn" 
+                                                        onclick='openEditModal({id: "{{ student[0] }}", name: "{{ student[1]|escape }}", age: "{{ student[2] }}", department_id: "{{ student[8] or '' }}", email: "{{ student[4]|escape }}", gpa: "{{ student[5] }}", status: "{{ student[6] }}"})'
+                                                        title="Edit Student">
+                                                    <span class="material-icons-round">edit</span>
+                                                </button>
+                                                <button type="button" class="action-btn delete-btn" 
+                                                        onclick='triggerConfirmDelete("{{ student[0] }}", "{{ student[1]|escape }}")'
+                                                        title="Delete Student">
+                                                    <span class="material-icons-round">delete</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="9">
+                                            <div class="empty-state">
+                                                <span class="material-icons-round">face</span>
+                                                <h3>No Students Found</h3>
+                                                <p>Try altering your search filters or add a new student record.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </form>
+
+                    <!-- Table Pagination -->
+                    <div class="pagination-container" id="tablePagination">
+                        <button class="secondary-btn" id="paginationPrevBtn" onclick="prevPage()"><span class="material-icons-round">chevron_left</span> Prev</button>
+                        <span class="pagination-info" id="paginationInfoLabel">Page 1 of 1</span>
+                        <button class="secondary-btn" id="paginationNextBtn" onclick="nextPage()">Next <span class="material-icons-round">chevron_right</span></button>
+                    </div>
+                </main>
             </div>
         </main>
     </div>
@@ -263,8 +467,8 @@
                 <h3 id="modalTitle">Add New Student</h3>
                 <button class="close-modal-btn" id="closeModalBtn">&times;</button>
             </div>
-
-            <form id="studentForm" action="/add" method="POST">
+            
+            <form id="studentForm" action="/add" method="POST" enctype="multipart/form-data">
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="studentName">Student Name</label>
@@ -273,8 +477,7 @@
 
                     <div class="form-group">
                         <label for="studentEmail">Email Address</label>
-                        <input type="email" id="studentEmail" name="email" placeholder="johndoe@university.edu"
-                            required>
+                        <input type="email" id="studentEmail" name="email" placeholder="johndoe@university.edu" required>
                     </div>
 
                     <div class="form-group">
@@ -284,13 +487,17 @@
 
                     <div class="form-group">
                         <label for="studentGpa">GPA (0.00 - 10.00)</label>
-                        <input type="number" id="studentGpa" name="gpa" min="0" max="10" step="0.01" placeholder="8.50"
-                            required>
+                        <input type="number" id="studentGpa" name="gpa" min="0" max="10" step="0.01" placeholder="8.50" required>
                     </div>
 
                     <div class="form-group">
                         <label for="studentDept">Department</label>
-                        <input type="text" id="studentDept" name="department" placeholder="Computer Science" required>
+                        <select id="studentDept" name="department_id" required>
+                            <option value="">Select Department...</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept[0] }}">{{ dept[1] }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="form-group">
@@ -298,8 +505,13 @@
                         <select id="studentStatus" name="status">
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
-                            <option value="Suspended">Suspended</option>
+                            <option value="Graduated">Graduated</option>
                         </select>
+                    </div>
+
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="studentImage">Profile Picture</label>
+                        <input type="file" id="studentImage" name="profile_image" accept="image/*" class="file-input-custom">
                     </div>
                 </div>
 
@@ -311,38 +523,33 @@
         </div>
     </div>
 
-    <!-- Department stats JSON Bridge for Chart.js -->
-    <script id="dept-stats-data" type="application/json">
-        [
-            {% for row in dept_stats %}
-            {
-                "department": "{{ row[0]|escape }}",
-                "count": {{ row[1] }},
-                "avg_gpa": {{ row[2] }}
-            }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        ]
-    </script>
+    <!-- ==========================
+            Delete Confirmation Modal
+    =========================== -->
+    <div class="modal-overlay" id="confirmDeleteModal">
+        <div class="modal-card confirm-card" style="max-width: 420px; padding: 25px;">
+            <div class="modal-header" style="border-bottom:none; padding:0; display:flex; justify-content:flex-end;">
+                <button class="close-modal-btn" onclick="closeConfirmDeleteModal()">&times;</button>
+            </div>
+            <div class="confirm-body" style="text-align: center; margin-top:-10px;">
+                <span class="material-icons-round" style="font-size: 56px; color: var(--danger);">warning</span>
+                <h3 style="margin-top: 15px; font-size:1.3rem;">Delete Student Record?</h3>
+                <p style="margin-top: 10px; color: var(--text-muted); font-size:0.95rem;">
+                    Are you sure you want to permanently delete <strong id="deleteStudentLabel">this student</strong>? This action cannot be undone.
+                </p>
+            </div>
+            <div class="modal-actions" style="justify-content: center; gap: 15px; margin-top:25px; padding:0;">
+                <button type="button" class="secondary-btn" onclick="closeConfirmDeleteModal()" style="min-width: 100px;">Cancel</button>
+                <a id="confirmDeleteLink" href="#" class="primary-btn" style="background: var(--danger); min-width: 100px; text-decoration:none; text-align:center;">Delete</a>
+            </div>
+        </div>
+    </div>
 
-    <!-- JS Fallback for edit redirect -->
-    {% if edit_student %}
-    <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            openEditModal({
-                id: "{{ edit_student[0] }}",
-                name: "{{ edit_student[1]|escape }}",
-                age: "{{ edit_student[2] }}",
-                department: "{{ edit_student[3]|escape }}",
-                email: "{{ edit_student[4]|escape }}",
-                gpa: "{{ edit_student[5] }}",
-                status: "{{ edit_student[6] }}"
-            });
-        });
-    </script>
-    {% endif %}
+    <!-- SheetJS for Excel Export, jsPDF & html2pdf.js for PDF Export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Custom Script -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-
 </html>

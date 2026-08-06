@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Departments Management | StudentSphere</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="light-theme">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic ERP</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="/" class="menu-item">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/#registry-section" class="menu-item">
+                    <span class="material-icons-round">groups</span>
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item active">
+                    <span class="material-icons-round">domain</span>
+                    <span>Departments</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header bar -->
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>🏢 Department Management</h2>
+                    <p class="subtitle">Organize and manage academic departments</p>
+                </div>
+                <div class="nav-controls">
+                    <button class="primary-btn" onclick="openAddDeptModal()">
+                        <span class="material-icons-round">add</span>
+                        <span>Add Department</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Department stats grid -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <span class="stat-label">Total Departments</span>
+                        <h2 class="stat-value">{{ departments|length }}</h2>
+                    </div>
+                    <div class="stat-icon-wrapper dept-color">
+                        <span class="material-icons-round">domain</span>
+                    </div>
+                </div>
+
+                {% if departments %}
+                    {% set ns = namespace(max_count=0, largest_dept='', max_gpa=0.0, best_dept='') %}
+                    {% for dept in departments %}
+                        {% if dept[4] > ns.max_count %}
+                            {% set ns.max_count = dept[4] %}
+                            {% set ns.largest_dept = dept[1] %}
+                        {% endif %}
+                        {% if dept[5]|float > ns.max_gpa %}
+                            {% set ns.max_gpa = dept[5]|float %}
+                            {% set ns.best_dept = dept[1] %}
+                        {% endif %}
+                    {% endfor %}
+
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Largest Department</span>
+                            <h2 class="stat-value" style="font-size: 1.5rem; margin-top: 10px;">{{ ns.largest_dept or 'N/A' }}</h2>
+                            <p class="subtitle">{{ ns.max_count }} Students</p>
+                        </div>
+                        <div class="stat-icon-wrapper students-color">
+                            <span class="material-icons-round">groups</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <span class="stat-label">Best Performing Dept</span>
+                            <h2 class="stat-value" style="font-size: 1.5rem; margin-top: 10px;">{{ ns.best_dept or 'N/A' }}</h2>
+                            <p class="subtitle">Avg GPA: {{ "%.2f"|format(ns.max_gpa) }}</p>
+                        </div>
+                        <div class="stat-icon-wrapper gpa-color">
+                            <span class="material-icons-round">stars</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+
+            <!-- Department table -->
+            <div class="main-card">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Department Name</th>
+                                <th>Description</th>
+                                <th>Student Count</th>
+                                <th>Average GPA</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if departments %}
+                                {% for dept in departments %}
+                                <tr>
+                                    <td><span class="dept-badge">{{ dept[2] }}</span></td>
+                                    <td class="student-name" style="font-weight:600;">{{ dept[1] }}</td>
+                                    <td>{{ dept[3] or 'No description provided' }}</td>
+                                    <td><strong>{{ dept[4] }}</strong> students</td>
+                                    <td>
+                                        <span class="gpa-badge {% if dept[5]|float >= 8.5 %}gpa-excellent{% elif dept[5]|float >= 7.5 %}gpa-good{% else %}gpa-average{% endif %}">
+                                            {{ "%.2f"|format(dept[5]|float) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="action-btn edit-btn" onclick='openEditDeptModal({id: "{{ dept[0] }}", name: "{{ dept[1]|escape }}", code: "{{ dept[2]|escape }}", description: "{{ dept[3]|escape }}"})' title="Edit Department">
+                                                <span class="material-icons-round">edit</span>
+                                            </button>
+                                            <a href="/departments/delete/{{ dept[0] }}" class="action-btn delete-btn" onclick="return confirm('Are you sure you want to delete this department? All associated students will be unassigned.')" title="Delete Department">
+                                                <span class="material-icons-round">delete</span>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="empty-state">
+                                            <span class="material-icons-round">domain</span>
+                                            <h3>No Departments Found</h3>
+                                            <p>Create a department to get started organizing your student registry.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add / Edit Department Modal -->
+    <div class="modal-overlay" id="deptModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="deptModalTitle">Add Department</h3>
+                <button class="close-modal-btn" onclick="closeDeptModal()">&times;</button>
+            </div>
+            <form id="deptForm" action="/departments/add" method="POST">
+                <div class="form-grid" style="grid-template-columns: 1fr;">
+                    <div class="form-group">
+                        <label for="deptName">Department Name</label>
+                        <input type="text" id="deptName" name="name" placeholder="e.g. Computer Science & Engineering" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="deptCode">Code</label>
+                        <input type="text" id="deptCode" name="code" placeholder="e.g. CSE" required maxlength="20">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="deptDesc">Description</label>
+                        <textarea id="deptDesc" name="description" placeholder="Provide a brief summary of the department" rows="4"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="secondary-btn" onclick="closeDeptModal()">Cancel</button>
+                    <button type="submit" class="primary-btn" id="deptSubmitBtn">Create Department</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const storedTheme = localStorage.getItem('theme') || 'light';
+        if (storedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.body.classList.remove('light-theme');
+        }
+
+        const deptModal = document.getElementById("deptModal");
+        const deptForm = document.getElementById("deptForm");
+        const deptModalTitle = document.getElementById("deptModalTitle");
+        const deptSubmitBtn = document.getElementById("deptSubmitBtn");
+        
+        const inputName = document.getElementById("deptName");
+        const inputCode = document.getElementById("deptCode");
+        const inputDesc = document.getElementById("deptDesc");
+
+        function openAddDeptModal() {
+            deptModalTitle.textContent = "Add New Department";
+            deptSubmitBtn.textContent = "Create Department";
+            deptForm.action = "/departments/add";
+            
+            inputName.value = "";
+            inputCode.value = "";
+            inputDesc.value = "";
+
+            deptModal.classList.add("active");
+        }
+
+        function openEditDeptModal(dept) {
+            deptModalTitle.textContent = "Edit Department";
+            deptSubmitBtn.textContent = "Save Changes";
+            deptForm.action = `/departments/edit/${dept.id}`;
+
+            inputName.value = dept.name;
+            inputCode.value = dept.code;
+            inputDesc.value = dept.description || "";
+
+            deptModal.classList.add("active");
+        }
+
+        function closeDeptModal() {
+            deptModal.classList.remove("active");
+        }
+
+        deptModal.addEventListener("click", (e) => {
+            if (e.target === deptModal) closeDeptModal();
+        });
+
+        // Dismiss Toast
+        setTimeout(() => {
+            const toasts = document.querySelectorAll(".toast");
+            toasts.forEach(toast => {
+                toast.style.opacity = "0";
+                toast.style.transform = "translateX(50px)";
+                toast.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+                setTimeout(() => toast.remove(), 400);
+            });
+        }, 4000);
+    </script>
+</body>
+</html>

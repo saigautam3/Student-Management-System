@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ student[1] }}'s Profile | StudentSphere</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="light-theme">
+
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic ERP</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="/" class="menu-item">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/#registry-section" class="menu-item active">
+                    <span class="material-icons-round">groups</span>
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item">
+                    <span class="material-icons-round">domain</span>
+                    <span>Departments</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header bar -->
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>Student Profile</h2>
+                    <p class="subtitle">Detailed Academic & Personal Records</p>
+                </div>
+                <div class="nav-controls">
+                    <a href="/" class="secondary-btn">
+                        <span class="material-icons-round">arrow_back</span>
+                        <span>Back to Dashboard</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Profile Details Grid -->
+            <div class="profile-grid">
+                <!-- Left Column: Avatar Card -->
+                <div class="profile-card avatar-card">
+                    <div class="profile-picture-container">
+                        {% if student[7] %}
+                            <img src="{{ url_for('static', filename=student[7].replace('static/', '')) }}" alt="{{ student[1] }}" class="profile-picture">
+                        {% else %}
+                            <div class="profile-avatar-large">{{ student[1][:1]|upper }}</div>
+                        {% endif %}
+                    </div>
+                    <h2 class="profile-student-name">{{ student[1] }}</h2>
+                    <span class="status-badge status-{{ student[6]|lower }}">{{ student[6] or 'Active' }}</span>
+                    <p class="profile-student-meta">Registered: {{ student[8].strftime('%B %d, %Y') if student[8] else 'N/A' }}</p>
+                </div>
+
+                <!-- Right Column: Academic Details -->
+                <div class="profile-card details-card">
+                    <h3>Academic Information</h3>
+                    <div class="info-grid">
+                        <div class="info-field">
+                            <span class="info-label">Email Address</span>
+                            <span class="info-value">
+                                <a href="mailto:{{ student[4] }}" class="email-link">{{ student[4] or 'N/A' }}</a>
+                            </span>
+                        </div>
+                        <div class="info-field">
+                            <span class="info-label">Age</span>
+                            <span class="info-value">{{ student[2] }} years old</span>
+                        </div>
+                        <div class="info-field">
+                            <span class="info-label">Department</span>
+                            <span class="info-value">
+                                <span class="dept-badge">{{ student[3] or 'Unassigned' }}</span>
+                            </span>
+                        </div>
+                        <div class="info-field">
+                            <span class="info-label">Cumulative GPA / CGPA</span>
+                            <span class="info-value">
+                                <span class="gpa-badge {% if student[5]|float >= 8.5 %}gpa-excellent{% elif student[5]|float >= 7.5 %}gpa-good{% else %}gpa-average{% endif %}">
+                                    {{ "%.2f"|format(student[5]|float) }} / 10.00
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Column: Activity Log for this Student -->
+                <div class="profile-card logs-card">
+                    <h3>Student Activity Log</h3>
+                    {% if activities %}
+                        <div class="activity-timeline">
+                            {% for act in activities %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge">
+                                    <span class="material-icons-round">history</span>
+                                </div>
+                                <div class="timeline-body">
+                                    <span class="timeline-action">{{ act[0] }}</span>
+                                    <p class="timeline-desc">{{ act[1] }}</p>
+                                    <span class="timeline-time">{{ act[2].strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <span class="material-icons-round">history</span>
+                            <p>No logged activities found for this student.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Theme synchronization logic -->
+    <script>
+        const storedTheme = localStorage.getItem('theme') || 'light';
+        if (storedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.body.classList.remove('light-theme');
+        }
+    </script>
+</body>
+</html>

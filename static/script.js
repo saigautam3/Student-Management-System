@@ -9,31 +9,84 @@ const storedTheme = localStorage.getItem('theme') || 'light';
 if (storedTheme === 'dark') {
     document.body.classList.add('dark-theme');
     document.body.classList.remove('light-theme');
-    themeIcon.textContent = 'light_mode';
+    if (themeIcon) themeIcon.textContent = 'light_mode';
 } else {
     document.body.classList.add('light-theme');
     document.body.classList.remove('dark-theme');
-    themeIcon.textContent = 'dark_mode';
+    if (themeIcon) themeIcon.textContent = 'dark_mode';
 }
 
-themeToggleBtn.addEventListener('click', () => {
-    if (document.body.classList.contains('light-theme')) {
-        document.body.classList.remove('light-theme');
-        document.body.classList.add('dark-theme');
-        themeIcon.textContent = 'light_mode';
-        localStorage.setItem('theme', 'dark');
-    } else {
-        document.body.classList.remove('dark-theme');
-        document.body.classList.add('light-theme');
-        themeIcon.textContent = 'dark_mode';
-        localStorage.setItem('theme', 'light');
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        if (document.body.classList.contains('light-theme')) {
+            document.body.classList.remove('light-theme');
+            document.body.classList.add('dark-theme');
+            themeIcon.textContent = 'light_mode';
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.body.classList.remove('dark-theme');
+            document.body.classList.add('light-theme');
+            themeIcon.textContent = 'dark_mode';
+            localStorage.setItem('theme', 'light');
+        }
+        // Update charts to match new theme colors
+        renderCharts();
+    });
+}
+
+// ==================================================
+// TABS / SECTIONS SWITCHER
+// ==================================================
+function switchTab(targetId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sidebar-menu .menu-item').forEach(el => el.classList.remove('active'));
+    
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+        targetEl.classList.add('active');
+        
+        // Update sidebar active menu item and title label
+        if (targetId === '#dashboard-section') {
+            document.getElementById('menu-dashboard').classList.add('active');
+            document.getElementById('page-title-label').textContent = "Dashboard Overview";
+        } else if (targetId === '#registry-section') {
+            document.getElementById('menu-registry').classList.add('active');
+            document.getElementById('page-title-label').textContent = "Student Registry";
+        }
     }
-    // Update charts to match new theme colors
+}
+
+// Sidebar click triggers
+document.querySelectorAll('.sidebar-menu .menu-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+        const href = item.getAttribute('href');
+        if (href.startsWith('#')) {
+            e.preventDefault();
+            switchTab(href);
+            window.location.hash = href;
+        }
+    });
+});
+
+// Sync hash on initial load
+window.addEventListener('DOMContentLoaded', () => {
+    // If query filters are active, default to registry
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasFilters = urlParams.has('search') || urlParams.has('department') || urlParams.has('status') || urlParams.has('gpa_min') || urlParams.has('gpa_max') || urlParams.has('age');
+    
+    if (hasFilters || window.location.hash === '#registry-section') {
+        switchTab('#registry-section');
+    } else {
+        switchTab('#dashboard-section');
+    }
+    
     renderCharts();
+    initPagination();
+    initBulkSelection();
 });
 
 // ==================================================
-// MODAL CONTROLLERS
+// STUDENT MODAL CONTROLLERS (ADD/EDIT)
 // ==================================================
 const studentModal = document.getElementById('studentModal');
 const openAddModalBtn = document.getElementById('openAddModalBtn');
@@ -43,7 +96,7 @@ const studentForm = document.getElementById('studentForm');
 const modalTitle = document.getElementById('modalTitle');
 const submitFormBtn = document.getElementById('submitFormBtn');
 
-// Modal Elements
+// Modal Input Fields
 const inputName = document.getElementById('studentName');
 const inputEmail = document.getElementById('studentEmail');
 const inputAge = document.getElementById('studentAge');
@@ -72,12 +125,12 @@ function openEditModal(student) {
     submitFormBtn.textContent = "Save Changes";
     studentForm.action = `/update/${student.id}`;
     
-    // Populate inputs
+    // Populate fields
     inputName.value = student.name;
     inputEmail.value = student.email;
     inputAge.value = student.age;
     inputGpa.value = student.gpa;
-    inputDept.value = student.department;
+    inputDept.value = student.department_id;
     inputStatus.value = student.status || "Active";
 
     studentModal.classList.add('active');
@@ -87,46 +140,112 @@ function closeModal() {
     studentModal.classList.remove('active');
 }
 
-// Attach listeners
+// Attach modal events
 if (openAddModalBtn) openAddModalBtn.addEventListener('click', openAddModal);
 if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
 if (cancelFormBtn) cancelFormBtn.addEventListener('click', closeModal);
 
-// Close on outside click
-studentModal.addEventListener('click', (e) => {
-    if (e.target === studentModal) closeModal();
-});
-
-// Expose openEditModal globally for inline button onclick calls
-window.openEditModal = openEditModal;
-
-// ==================================================
-// SEARCH & FILTERING (Instant Client-side)
-// ==================================================
-const searchInput = document.getElementById("searchInput");
-
-if (searchInput) {
-    searchInput.addEventListener("input", function() {
-        const filter = this.value.toLowerCase();
-        const rows = document.querySelectorAll("#studentTable tbody tr");
-        
-        rows.forEach(row => {
-            if (row.querySelector(".empty-state")) return;
-            const text = row.innerText.toLowerCase();
-            row.style.display = text.includes(filter) ? "" : "none";
-        });
+if (studentModal) {
+    studentModal.addEventListener('click', (e) => {
+        if (e.target === studentModal) closeModal();
     });
 }
 
-function filterDepartment() {
-    const department = document.getElementById("departmentFilter").value;
-    let url = "/";
-    if (department) {
-        url += "?department=" + encodeURIComponent(department);
+window.openEditModal = openEditModal;
+
+// ==================================================
+// DELETE CONFIRMATION MODAL
+// ==================================================
+const confirmDeleteModal = document.getElementById("confirmDeleteModal");
+const deleteStudentLabel = document.getElementById("deleteStudentLabel");
+const confirmDeleteLink = document.getElementById("confirmDeleteLink");
+
+function triggerConfirmDelete(id, name) {
+    if (deleteStudentLabel && confirmDeleteLink && confirmDeleteModal) {
+        deleteStudentLabel.textContent = name;
+        confirmDeleteLink.href = `/delete/${id}`;
+        confirmDeleteModal.classList.add("active");
     }
-    window.location.href = url;
 }
-window.filterDepartment = filterDepartment;
+
+function closeConfirmDeleteModal() {
+    if (confirmDeleteModal) {
+        confirmDeleteModal.classList.remove("active");
+    }
+}
+
+if (confirmDeleteModal) {
+    confirmDeleteModal.addEventListener("click", (e) => {
+        if (e.target === confirmDeleteModal) closeConfirmDeleteModal();
+    });
+}
+
+window.triggerConfirmDelete = triggerConfirmDelete;
+window.closeConfirmDeleteModal = closeConfirmDeleteModal;
+
+// ==================================================
+// TABLE PAGINATION SYSTEM
+// ==================================================
+let currentPage = 1;
+const rowsPerPage = 10;
+let tableRows = [];
+
+function initPagination() {
+    const tableBody = document.getElementById("studentTableBody");
+    if (!tableBody) return;
+    
+    tableRows = Array.from(tableBody.querySelectorAll("tr"));
+    
+    // Check if empty state is showing
+    if (tableRows.length === 1 && tableRows[0].querySelector(".empty-state")) {
+        const pag = document.getElementById("tablePagination");
+        if (pag) pag.style.display = "none";
+        return;
+    }
+
+    paginate(currentPage);
+}
+
+function paginate(page) {
+    const totalPages = Math.ceil(tableRows.length / rowsPerPage);
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    
+    currentPage = page;
+
+    const start = (currentPage - 1) * rowsPerPage;
+    const end = start + rowsPerPage;
+
+    tableRows.forEach((row, index) => {
+        if (index >= start && index < end) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+    });
+
+    const infoLabel = document.getElementById("paginationInfoLabel");
+    if (infoLabel) {
+        infoLabel.textContent = `Page ${currentPage} of ${totalPages || 1}`;
+    }
+
+    const prevBtn = document.getElementById("paginationPrevBtn");
+    const nextBtn = document.getElementById("paginationNextBtn");
+    
+    if (prevBtn) prevBtn.disabled = currentPage === 1;
+    if (nextBtn) nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+}
+
+function nextPage() {
+    paginate(currentPage + 1);
+}
+
+function prevPage() {
+    paginate(currentPage - 1);
+}
+
+window.nextPage = nextPage;
+window.prevPage = prevPage;
 
 // ==================================================
 // TABLE DYNAMIC SORTING
@@ -136,16 +255,16 @@ let sortDirections = {};
 function sortTable(columnIndex) {
     const table = document.getElementById("studentTable");
     const tbody = table.querySelector("tbody");
+    // Sort all rows, ignoring pagination hidden states
     const rows = Array.from(tbody.querySelectorAll("tr"));
     
-    // Skip if empty state row
     if (rows.length === 1 && rows[0].querySelector(".empty-state")) return;
 
     const currentDirection = sortDirections[columnIndex] || 'asc';
     const nextDirection = currentDirection === 'asc' ? 'desc' : 'asc';
     sortDirections[columnIndex] = nextDirection;
 
-    // Update icons
+    // Reset indicator icons
     const headers = table.querySelectorAll("th.sortable");
     headers.forEach((th, idx) => {
         const icon = th.querySelector(".sort-icon");
@@ -158,12 +277,15 @@ function sortTable(columnIndex) {
         }
     });
 
-    rows.sort((a, b) => {
-        let cellA = a.cells[columnIndex].innerText.trim();
-        let cellB = b.cells[columnIndex].innerText.trim();
+    // Checkbox is at index 0, so SL is cell[1], Name is cell[2], etc.
+    const actualCellIndex = columnIndex + 1;
 
-        // Handle numeric sorting (Age, GPA, SL No)
-        if (columnIndex === 0 || columnIndex === 3 || columnIndex === 5) {
+    rows.sort((a, b) => {
+        let cellA = a.cells[actualCellIndex].innerText.trim();
+        let cellB = b.cells[actualCellIndex].innerText.trim();
+
+        // Numeric fields: SL No (1), Age (4), GPA (6)
+        if (actualCellIndex === 1 || actualCellIndex === 4 || actualCellIndex === 6) {
             const numA = parseFloat(cellA);
             const numB = parseFloat(cellB);
             if (!isNaN(numA) && !isNaN(numB)) {
@@ -171,73 +293,242 @@ function sortTable(columnIndex) {
             }
         }
 
-        // Default alphabetical sorting
+        // Alphabetical sorting
         return nextDirection === 'asc' 
             ? cellA.localeCompare(cellB) 
             : cellB.localeCompare(cellA);
     });
 
-    // Re-append sorted rows
+    // Re-append sorted rows and reset pagination view
     rows.forEach(row => tbody.appendChild(row));
+    initPagination();
 }
 window.sortTable = sortTable;
 
 // ==================================================
-// CSV EXPORTER
+// BULK OPERATIONS
 // ==================================================
-const exportBtn = document.getElementById('exportBtn');
-if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-        const table = document.getElementById("studentTable");
-        const rows = Array.from(table.querySelectorAll("tbody tr"));
-        
-        // Check if empty
-        if (rows.length === 1 && rows[0].querySelector(".empty-state")) {
-            alert("No records to export.");
-            return;
-        }
+function initBulkSelection() {
+    const selectAll = document.getElementById("selectAllCheckbox");
+    const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+    const bulkToolbar = document.getElementById("bulkToolbar");
+    const selectedCountLabel = document.getElementById("bulkSelectedCount");
 
-        let csvContent = "SL No,Name,Email,Age,Department,GPA,Status\n";
+    if (!selectAll) return;
 
-        rows.forEach(row => {
-            const slNo = row.cells[0].innerText.trim();
-            const name = row.cells[1].querySelector(".student-name")?.innerText.trim() || row.cells[1].innerText.trim();
-            const email = row.cells[2].innerText.trim();
-            const age = row.cells[3].innerText.trim();
-            const dept = row.cells[4].innerText.trim();
-            const gpa = row.cells[5].innerText.trim();
-            const status = row.cells[6].innerText.trim();
-
-            const rowData = [
-                slNo,
-                `"${name.replace(/"/g, '""')}"`,
-                `"${email.replace(/"/g, '""')}"`,
-                age,
-                `"${dept.replace(/"/g, '""')}"`,
-                gpa,
-                `"${status.replace(/"/g, '""')}"`
-            ];
-
-            csvContent += rowData.join(",") + "\n";
+    selectAll.addEventListener("change", function() {
+        rowCheckboxes.forEach(cb => {
+            cb.checked = selectAll.checked;
+            const tr = cb.closest("tr");
+            if (selectAll.checked) {
+                tr.classList.add("row-selected");
+            } else {
+                tr.classList.remove("row-selected");
+            }
         });
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `student_registry_${new Date().toISOString().slice(0, 10)}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        updateBulkToolbarState();
     });
+
+    rowCheckboxes.forEach(cb => {
+        cb.addEventListener("change", function() {
+            const tr = cb.closest("tr");
+            if (cb.checked) {
+                tr.classList.add("row-selected");
+            } else {
+                tr.classList.remove("row-selected");
+            }
+            // Sync selectAll
+            const allChecked = Array.from(rowCheckboxes).every(c => c.checked);
+            selectAll.checked = allChecked;
+            updateBulkToolbarState();
+        });
+    });
+
+    function updateBulkToolbarState() {
+        const checkedCount = document.querySelectorAll(".row-checkbox:checked").length;
+        if (checkedCount > 0) {
+            bulkToolbar.classList.add("active");
+            selectedCountLabel.textContent = checkedCount;
+        } else {
+            bulkToolbar.classList.remove("active");
+        }
+    }
 }
 
+function submitBulkAction(action) {
+    const bulkActionInput = document.getElementById("bulkActionInput");
+    const bulkForm = document.getElementById("bulkForm");
+    const selectedCount = document.querySelectorAll(".row-checkbox:checked").length;
+
+    if (action === 'delete') {
+        if (!confirm(`Are you sure you want to delete the ${selectedCount} selected students?`)) {
+            return;
+        }
+    }
+
+    if (bulkActionInput && bulkForm) {
+        bulkActionInput.value = action;
+        bulkForm.submit();
+    }
+}
+
+window.submitBulkAction = submitBulkAction;
+
 // ==================================================
-// CHART.JS DASHBOARD REPORT
+// DOCUMENT EXPORTERS
 // ==================================================
-let deptChart = null;
-let gpaChart = null;
+
+// 1. CSV EXPORT (Visible rows)
+function exportTableToCSV() {
+    const table = document.getElementById("studentTable");
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    
+    if (rows.length === 1 && rows[0].querySelector(".empty-state")) {
+        alert("No records to export.");
+        return;
+    }
+
+    let csvContent = "SL No,Name,Email,Age,Department,GPA,Status\n";
+
+    rows.forEach(row => {
+        if (row.style.display === "none") return; // Export only current visible page / filtered rows
+
+        const slNo = row.cells[1].innerText.trim();
+        const name = row.cells[2].querySelector(".student-name")?.innerText.trim() || row.cells[2].innerText.trim();
+        const email = row.cells[3].innerText.trim();
+        const age = row.cells[4].innerText.trim();
+        const dept = row.cells[5].innerText.trim();
+        const gpa = row.cells[6].innerText.trim();
+        const status = row.cells[7].innerText.trim();
+
+        const rowData = [
+            slNo,
+            `"${name.replace(/"/g, '""')}"`,
+            `"${email.replace(/"/g, '""')}"`,
+            age,
+            `"${dept.replace(/"/g, '""')}"`,
+            gpa,
+            `"${status.replace(/"/g, '""')}"`
+        ];
+
+        csvContent += rowData.join(",") + "\n";
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `student_registry_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 2. EXCEL EXPORT (using SheetJS from CDN)
+function exportTableToExcel() {
+    const table = document.getElementById("studentTable");
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    
+    if (rows.length === 1 && rows[0].querySelector(".empty-state")) {
+        alert("No records to export.");
+        return;
+    }
+
+    let data = [];
+    rows.forEach((row) => {
+        if (row.style.display === "none") return; // Filtered rows only
+        
+        const slNo = row.cells[1].innerText.trim();
+        const name = row.cells[2].querySelector(".student-name")?.innerText.trim() || row.cells[2].innerText.trim();
+        const email = row.cells[3].innerText.trim();
+        const age = row.cells[4].innerText.trim();
+        const dept = row.cells[5].innerText.trim();
+        const gpa = row.cells[6].innerText.trim();
+        const status = row.cells[7].innerText.trim();
+        
+        data.push({
+            "SL No": parseInt(slNo),
+            "Name": name,
+            "Email": email,
+            "Age": parseInt(age),
+            "Department": dept,
+            "GPA": parseFloat(gpa),
+            "Status": status
+        });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Student Registry");
+    XLSX.writeFile(workbook, `student_registry_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// 3. PDF EXPORT (using html2pdf.js from CDN)
+function exportTableToPDF() {
+    const element = document.querySelector(".table-container");
+    if (!element) return;
+    
+    const opt = {
+        margin:       0.5,
+        filename:     `student_registry_${new Date().toISOString().slice(0,10)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+
+// 4. PRINT REPORT
+function printReport() {
+    window.print();
+}
+
+// 5. BULK CSV EXPORT
+function bulkExportCSV() {
+    const selectedCheckboxes = document.querySelectorAll(".row-checkbox:checked");
+    if (selectedCheckboxes.length === 0) return;
+    
+    let csvContent = "SL No,Name,Email,Age,Department,GPA,Status\n";
+    selectedCheckboxes.forEach((cb, index) => {
+        const row = cb.closest("tr");
+        const slNo = index + 1;
+        const name = row.cells[2].querySelector(".student-name")?.innerText.trim() || row.cells[2].innerText.trim();
+        const email = row.cells[3].innerText.trim();
+        const age = row.cells[4].innerText.trim();
+        const dept = row.cells[5].innerText.trim();
+        const gpa = row.cells[6].innerText.trim();
+        const status = row.cells[7].innerText.trim();
+        
+        csvContent += `${slNo},"${name.replace(/"/g, '""')}","${email.replace(/"/g, '""')}",${age},"${dept.replace(/"/g, '""')}",${gpa},"${status.replace(/"/g, '""')}"\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bulk_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Clear Filters Helper
+function clearAllFilters(e) {
+    e.preventDefault();
+    window.location.href = "/#registry-section";
+}
+
+window.exportTableToCSV = exportTableToCSV;
+window.exportTableToExcel = exportTableToExcel;
+window.exportTableToPDF = exportTableToPDF;
+window.printReport = printReport;
+window.bulkExportCSV = bulkExportCSV;
+window.clearAllFilters = clearAllFilters;
+
+// ==================================================
+// CHART.JS DASHBOARD REPORT (6 CHARTS)
+// ==================================================
+let chartsInstance = {};
 
 function renderCharts() {
     const isDark = document.body.classList.contains('dark-theme');
@@ -246,37 +537,44 @@ function renderCharts() {
     const textFamily = "'Outfit', sans-serif";
 
     // Read chart data bridge
-    const dataBridge = document.getElementById('dept-stats-data');
+    const dataBridge = document.getElementById('analytics-data-bridge');
     if (!dataBridge) return;
 
-    const statsData = JSON.parse(dataBridge.textContent || '[]');
-    if (statsData.length === 0) return;
+    const data = JSON.parse(dataBridge.textContent || '{}');
+    if (!data.departments || data.departments.length === 0) return;
 
-    const departments = statsData.map(d => d.department);
-    const studentCounts = statsData.map(d => d.count);
-    const averageGpas = statsData.map(d => d.avg_gpa);
+    // Color theme helper
+    const primaryBg = 'rgba(59, 130, 246, 0.75)';
+    const primaryHover = 'rgba(37, 99, 235, 1)';
+    const chartColors = [
+        'rgba(59, 130, 246, 0.75)', 
+        'rgba(16, 185, 129, 0.75)', 
+        'rgba(245, 158, 11, 0.75)',  
+        'rgba(14, 165, 233, 0.75)',  
+        'rgba(139, 92, 246, 0.75)',  
+        'rgba(236, 72, 153, 0.75)'   
+    ];
+    const chartBorderColor = isDark ? '#0f172a' : '#ffffff';
 
-    if (deptChart) deptChart.destroy();
-    if (gpaChart) gpaChart.destroy();
+    // Helper to destroy active chart instance
+    const cleanChart = (name) => {
+        if (chartsInstance[name]) {
+            chartsInstance[name].destroy();
+        }
+    };
 
-    // Chart 1: Student distribution (Doughnut)
+    // 1. Department Distribution (Doughnut Chart)
     const ctx1 = document.getElementById('deptDistributionChart');
     if (ctx1) {
-        deptChart = new Chart(ctx1, {
+        cleanChart('deptDist');
+        chartsInstance['deptDist'] = new Chart(ctx1, {
             type: 'doughnut',
             data: {
-                labels: departments,
+                labels: data.departments,
                 datasets: [{
-                    data: studentCounts,
-                    backgroundColor: [
-                        'rgba(59, 130, 246, 0.75)', 
-                        'rgba(16, 185, 129, 0.75)', 
-                        'rgba(245, 158, 11, 0.75)',  
-                        'rgba(14, 165, 233, 0.75)',  
-                        'rgba(139, 92, 246, 0.75)',  
-                        'rgba(236, 72, 153, 0.75)'   
-                    ],
-                    borderColor: isDark ? '#0f172a' : '#ffffff',
+                    data: data.studentCounts,
+                    backgroundColor: chartColors,
+                    borderColor: chartBorderColor,
                     borderWidth: 2
                 }]
             },
@@ -286,56 +584,168 @@ function renderCharts() {
                 plugins: {
                     legend: {
                         position: 'right',
-                        labels: {
-                            color: labelColor,
-                            font: { family: textFamily, size: 12 }
-                        }
+                        labels: { color: labelColor, font: { family: textFamily, size: 12 } }
                     }
                 }
             }
         });
     }
 
-    // Chart 2: Average GPA by Department (Bar)
+    // 2. Average GPA by Department (Bar Chart)
     const ctx2 = document.getElementById('deptGpaChart');
     if (ctx2) {
-        gpaChart = new Chart(ctx2, {
+        cleanChart('deptGpa');
+        chartsInstance['deptGpa'] = new Chart(ctx2, {
             type: 'bar',
             data: {
-                labels: departments,
+                labels: data.departments,
                 datasets: [{
                     label: 'Average GPA',
-                    data: averageGpas,
-                    backgroundColor: 'rgba(59, 130, 246, 0.85)',
-                    hoverBackgroundColor: 'rgba(37, 99, 235, 1)',
+                    data: data.avgGpas,
+                    backgroundColor: primaryBg,
+                    hoverBackgroundColor: primaryHover,
                     borderRadius: 6,
-                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: labelColor, font: { family: textFamily } } },
+                    y: { min: 0, max: 10, grid: { color: gridColor }, ticks: { color: labelColor, font: { family: textFamily }, stepSize: 2 } }
+                }
+            }
+        });
+    }
+
+    // 3. GPA Range Distribution (Bar Chart)
+    const ctx3 = document.getElementById('gpaDistributionChart');
+    if (ctx3) {
+        cleanChart('gpaDist');
+        chartsInstance['gpaDist'] = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: ['< 5.00', '5.00 - 7.49', '7.50 - 8.49', '8.50+'],
+                datasets: [{
+                    label: 'Students Count',
+                    data: data.gpaDist,
+                    backgroundColor: 'rgba(139, 92, 246, 0.75)',
+                    hoverBackgroundColor: 'rgba(124, 58, 237, 1)',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: labelColor, font: { family: textFamily } } },
+                    y: { grid: { color: gridColor }, ticks: { color: labelColor, font: { family: textFamily }, stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    // 4. Status Distribution (Pie Chart)
+    const ctx4 = document.getElementById('statusDistributionChart');
+    if (ctx4) {
+        cleanChart('statusDist');
+        chartsInstance['statusDist'] = new Chart(ctx4, {
+            type: 'pie',
+            data: {
+                labels: ['Active', 'Inactive', 'Graduated'],
+                datasets: [{
+                    data: [data.statusDist.Active, data.statusDist.Inactive, data.statusDist.Graduated],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.75)', // Active green
+                        'rgba(239, 68, 68, 0.75)',  // Inactive red
+                        'rgba(59, 130, 246, 0.75)'   // Graduated blue
+                    ],
+                    borderColor: chartBorderColor,
+                    borderWidth: 2
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: {
+                        position: 'right',
+                        labels: { color: labelColor, font: { family: textFamily, size: 12 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // 5. Age Distribution (Bar Chart)
+    const ctx5 = document.getElementById('ageDistributionChart');
+    if (ctx5) {
+        cleanChart('ageDist');
+        chartsInstance['ageDist'] = new Chart(ctx5, {
+            type: 'bar',
+            data: {
+                labels: ['Under 18', '18 - 21', '22 - 25', '26+'],
+                datasets: [{
+                    label: 'Students Count',
+                    data: data.ageDist,
+                    backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                    hoverBackgroundColor: 'rgba(217, 119, 6, 1)',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: labelColor, font: { family: textFamily } } },
+                    y: { grid: { color: gridColor }, ticks: { color: labelColor, font: { family: textFamily }, stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    // 6. Admissions Growth Trend (Line Chart)
+    const ctx6 = document.getElementById('growthTrendChart');
+    if (ctx6) {
+        cleanChart('growthTrend');
+        chartsInstance['growthTrend'] = new Chart(ctx6, {
+            type: 'line',
+            data: {
+                labels: data.months,
+                datasets: [
+                    {
+                        label: 'Monthly Admissions',
+                        data: data.monthlyCounts,
+                        borderColor: 'rgba(16, 185, 129, 0.8)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Cumulative Students',
+                        data: data.cumulativeCounts,
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: labelColor, font: { family: textFamily } }
+                    }
                 },
                 scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: {
-                            color: labelColor,
-                            font: { family: textFamily }
-                        }
-                    },
-                    y: {
-                        min: 0,
-                        max: 10,
-                        grid: { color: gridColor },
-                        ticks: {
-                            color: labelColor,
-                            font: { family: textFamily },
-                            stepSize: 1
-                        }
-                    }
+                    x: { grid: { display: false }, ticks: { color: labelColor, font: { family: textFamily } } },
+                    y: { grid: { color: gridColor }, ticks: { color: labelColor, font: { family: textFamily }, stepSize: 2 } }
                 }
             }
         });
@@ -352,8 +762,3 @@ setTimeout(() => {
         setTimeout(() => toast.remove(), 400);
     });
 }, 4000);
-
-// Initialize charts on DOM content loaded
-window.addEventListener('DOMContentLoaded', () => {
-    renderCharts();
-});

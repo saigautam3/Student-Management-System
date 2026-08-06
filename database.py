@@ -1,4 +1,5 @@
 import psycopg2
+
 def get_connection():
     conn = psycopg2.connect(
         host="localhost",
@@ -8,6 +9,20 @@ def get_connection():
         port="5432"
     )
     return conn
+
+def log_activity(action, details=None):
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO activity_logs (action, details) VALUES (%s, %s)",
+            (action, details)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Error logging activity:", e)
 
 
 #import os

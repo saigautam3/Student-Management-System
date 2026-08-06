@@ -11,23 +11,35 @@ StudentSphere is a modern, responsive web application for managing academic reco
   - *Active Enrolled* count.
   - *Average GPA* of all students (automatically calculated).
   - *Departments count* (number of unique departments).
+
 - **B - Bar & Doughnut Analytics Charts**: Integrated **Chart.js** dashboard featuring:
   - A *Doughnut Chart* displaying the student distribution by department.
   - A *Bar Chart* showing the average GPA per department.
   - Interactive hover highlights and legends.
+
 - **C - Client-Side Search**: A real-time, case-insensitive search bar that filters the student registry instantly as you type.
+
 - **D - Dynamic Theme Switcher**: Full support for both **Light Mode** and **Dark Mode** with smooth transitions. The user's theme preference is persisted in `localStorage` and charts automatically redraw to match the selected theme's color palette.
+
 - **E - Export to CSV**: A single-click utility that compiles the current student registry into a standard `.csv` spreadsheet file and triggers a browser download.
+
 - **F - Flash Notifications (Toasts)**: System events (adding, updating, or deleting students) trigger modern, self-dismissing toast notifications colored by category (success, info, danger).
+
 - **G - GPA Scale (0.00 to 10.00)**: Supports standard 10-point grading scales. GPAs are highlighted with color-coded badges based on performance:
   - `gpa-excellent` (Green badge): $\ge$ 8.50
   - `gpa-good` (Blue badge): 7.50 to 8.49
   - `gpa-average` (Orange badge): $<$ 7.50
+
 - **H - HTML5 Form Validation**: The Add/Edit student form utilizes strict HTML5 validations for data types (email, numbers), minimum/maximum bounds (ages, GPAs), and required fields.
+
 - **I - Interactive Modals**: Add and Edit operations are housed in clean, overlay-based modal forms that slide into view to preserve space and user context.
+
 - **L - Live Database Syncing**: Fully backed by PostgreSQL to ensure immediate data updates and ACID transaction compliance.
+
 - **P - Profile Avatars**: Renders circular profile avatars dynamically utilizing the first letter of the student's name.
+
 - **R - Responsive Grid Layout**: Built using a modern CSS Grid/Flexbox design system that adjusts seamlessly to mobile, tablet, and desktop screens.
+
 - **S - Smart Table Sorting**: Toggleable sorting (ascending and descending) for table columns including *SL No*, *Name*, *Email*, *Age*, *Department*, and *GPA* with responsive sort indicator icons.
 
 ---

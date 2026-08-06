@@ -23,12 +23,12 @@ def run_migration():
         # 2. Insert default faculty user if none exists
         cur.execute("SELECT COUNT(*) FROM users WHERE username = 'faculty'")
         if cur.fetchone()[0] == 0:
-            hashed_pwd = generate_password_hash('facultypassword')
+            hashed_pwd = generate_password_hash('FacultyPass123!')
             cur.execute("""
                 INSERT INTO users (username, password_hash, email)
                 VALUES (%s, %s, %s)
             """, ('faculty', hashed_pwd, 'faculty@university.edu'))
-            print("- Default faculty user ('faculty' / 'facultypassword') created.")
+            print("- Default faculty user ('faculty' / 'FacultyPass123!') created.")
         else:
             print("- Default faculty user already exists.")
 

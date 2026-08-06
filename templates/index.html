@@ -1,319 +1,335 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Portal | Management System</title>
+    
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <title>Student Management System</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
-
-    <!-- Google Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons"
-          rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+<body class="light-theme">
 
-<body>
-<div class="container">
-    <!-- ==========================
-            Header
-    =========================== -->
-
-    <header class="header">
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
         {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="toast-container">
-        {% for category, message in messages %}
-        <div class="toast {{ category }}">
-        {{ message }}
-        </div>
-        {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-        <div>
-            <h1>🎓 Student Management System</h1>
-        </div>
-    </header>
-
-    <!-- ==========================
-            Flash Messages
-    =========================== -->
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        {% for category, message in messages %}
-            <div class="flash {{ category }}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-    {% endwith %}
-
-    <!-- ==========================
-            Dashboard
-    =========================== -->
-
-    <div class="dashboard">
-        <div class="dashboard-card students-card">
-            <div>
-                <h3>Total Students</h3>
-                <h2>{{ total_students }}</h2>
-            </div>
-
-            <span class="material-icons dashboard-icon">
-                groups
-            </span>
-        </div>
-        <div class="dashboard-card department-card">
-            <div>
-                <h3>Departments</h3>
-                <h2>{{ total_departments }}</h2>
-            </div>
-            <span class="material-icons dashboard-icon">
-                apartment
-            </span>
-        </div>
-    </div>
-
-    <!-- ==========================
-            Add / Edit Student
-    =========================== -->
-
-    <div class="card">
-        <div class="card-header">
-            {% if edit_student %}
-                <h2>✏️ Edit Student</h2>
-            {% else %}
-                <h2>Add Student</h2>
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
             {% endif %}
-        </div>
-
-        {% if edit_student %}
-        <form action="/update/{{ edit_student[0] }}" method="POST">
-        {% else %}
-        <form action="/add" method="POST">
-        {% endif %}
-
-            <div class="form-grid">
-
-                <div class="form-group">
-                    <label>
-                        Student Name
-                    </label>
-                    <input
-                        type="text"
-                        name="name"
-                        placeholder="Enter student name"
-                        value="{{ edit_student[1] if edit_student else '' }}"
-                        required>
-                </div>
-
-                <div class="form-group">
-                    <label>
-                        Age
-                    </label>
-                    <input
-                        type="number"
-                        name="age"
-                        placeholder="Enter age"
-                        value="{{ edit_student[2] if edit_student else '' }}"
-                        required>
-                </div>
-
-                <div class="form-group full-width">
-                    <label>
-                        Department
-                    </label>
-                    <input
-                        type="text"
-                        name="department"
-                        placeholder="Enter department"
-                        value="{{ edit_student[3] if edit_student else '' }}"
-                        required>
-                </div>
-
-            </div>
-
-            <div class="button-group">
-                {% if edit_student %}
-                    <button class="primary-btn" type="submit">
-                        💾 Update Student
-                    </button>
-                    <a href="/"
-                       class="cancel-btn">
-                        Cancel
-                    </a>
-                {% else %}
-                    <button class="primary-btn"
-                            type="submit">
-                        ➕ Add Student
-                    </button>
-                {% endif %}
-            </div>
-        </form>
+        {% endwith %}
     </div>
+
+    <div class="app-layout">
+        <!-- ==========================
+                Sidebar / Top Header
+        =========================== -->
+        <header class="navbar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic Records & Analytics</p>
+                </div>
+            </div>
+            
+            <div class="nav-controls">
+                <button class="theme-toggle-btn" id="themeToggle" title="Toggle Theme">
+                    <span class="material-icons-round" id="themeIcon">dark_mode</span>
+                </button>
+            </div>
+        </header>
 
         <!-- ==========================
-            Student Records
-    =========================== -->
-
-    <div class="card">
-        <div class="table-header">
-            <h2>📋 Student Records</h2>
-            <div class="table-tools">
-                
-                <!-- Search -->
-                <input
-                    type="text"
-                    id="searchInput"
-                    placeholder="🔍 Search Student..."
-                    value="{{ search }}">
-
-                <!-- Department Filter -->
-
-                <select
-                    id="departmentFilter"
-                    onchange="filterDepartment()">
-                    <option value="">All Departments</option>
-                    {% for dept in departments %}
-                    <option
-                        value="{{ dept[0] }}"
-                        {% if selected_department == dept[0] %}
-                        selected
-                        {% endif %}
-                    >
-                        {{ dept[0] }}
-                    </option>
-                    {% endfor %}
-                </select>
+                Stats Dashboard
+        =========================== -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Total Students</span>
+                    <h2 class="stat-value" id="totalStudentsCount">{{ total_students }}</h2>
+                </div>
+                <div class="stat-icon-wrapper students-color">
+                    <span class="material-icons-round">groups</span>
+                </div>
             </div>
-        </div>
 
-        <div class="table-container">
-            <table id="studentTable">
-                <thead>
-                    <tr>
-                        <th>SL No</th>
-                        <th>Name</th>
-                        <th>Age</th>
-                        <th>Department</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% if students %}
-                    {% for student in students %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td>
-                            <strong>
-                                {{ student[1] }}
-                            </strong>
-                        </td>
-                        <td>
-                            {{ student[2] }}
-                        </td>
-                        <td>
-                            <span class="department-badge">
-                                {{ student[3] }}
-                            </span>
-                        </td>
-                        <td>
-                            <div class="action-buttons">
-                                <a
-                                    href="/edit/{{ student[0] }}"
-                                    class="edit-btn">
-                                    ✏ Edit
-                                </a>
-                                <a
-                                    href="/delete/{{ student[0] }}"
-                                    class="delete-btn"
-                                    onclick="return confirm('Are you sure you want to delete this student?')">
-                                    🗑 Delete
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="5">
-                            <div class="empty-state">
-                                <span class="material-icons">
-                                    school
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Active Enrolled</span>
+                    <h2 class="stat-value">{{ active_students }}</h2>
+                </div>
+                <div class="stat-icon-wrapper active-color">
+                    <span class="material-icons-round">how_to_reg</span>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Average GPA</span>
+                    <h2 class="stat-value">{{ avg_gpa }}</h2>
+                </div>
+                <div class="stat-icon-wrapper gpa-color">
+                    <span class="material-icons-round">stars</span>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Departments</span>
+                    <h2 class="stat-value">{{ total_departments }}</h2>
+                </div>
+                <div class="stat-icon-wrapper dept-color">
+                    <span class="material-icons-round">domain</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================
+                Analytics Charts
+        =========================== -->
+        <section class="analytics-section">
+            <div class="analytics-card">
+                <div class="analytics-header">
+                    <h3>Student Distribution by Department</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="deptDistributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="analytics-card">
+                <div class="analytics-header">
+                    <h3>Average GPA by Department</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="deptGpaChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================
+                Student Records List
+        =========================== -->
+        <main class="main-card">
+            <div class="table-toolbar">
+                <div class="toolbar-title">
+                    <h2>📋 Student Registry</h2>
+                    <span class="registry-count">{{ students|length }} records found</span>
+                </div>
+                
+                <div class="toolbar-actions">
+                    <!-- Search Input -->
+                    <div class="search-box">
+                        <span class="material-icons-round search-icon">search</span>
+                        <input type="text" id="searchInput" placeholder="Search student name, email, department..." value="{{ search }}">
+                    </div>
+
+                    <!-- Department Filter -->
+                    <div class="select-wrapper">
+                        <select id="departmentFilter" onchange="filterDepartment()">
+                            <option value="">All Departments</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept[0] }}" {% if selected_department == dept[0] %}selected{% endif %}>
+                                {{ dept[0] }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Export Button -->
+                    <button class="secondary-btn" id="exportBtn" title="Export to CSV">
+                        <span class="material-icons-round">download</span>
+                        <span>Export</span>
+                    </button>
+
+                    <!-- Add Student Button -->
+                    <button class="primary-btn" id="openAddModalBtn">
+                        <span class="material-icons-round">add</span>
+                        <span>Add Student</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-container">
+                <table id="studentTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable(0)">SL No <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(1)">Name <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(2)">Email <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(3)">Age <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(4)">Department <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(5)">GPA <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th class="sortable" onclick="sortTable(6)">Status <span class="sort-icon material-icons-round">unfold_more</span></th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% if students %}
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <div class="student-profile">
+                                    <div class="avatar">{{ student[1][:1]|upper }}</div>
+                                    <span class="student-name">{{ student[1] }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <a href="mailto:{{ student[4] }}" class="email-link">{{ student[4] or 'N/A' }}</a>
+                            </td>
+                            <td>{{ student[2] }}</td>
+                            <td>
+                                <span class="dept-badge">{{ student[3] }}</span>
+                            </td>
+                            <td>
+                                <span class="gpa-badge {% if student[5]|float >= 3.5 %}gpa-excellent{% elif student[5]|float >= 3.0 %}gpa-good{% else %}gpa-average{% endif %}">
+                                    {{ "%.2f"|format(student[5]|float) }}
                                 </span>
-                                <h3>
-                                    No Students Found
-                                </h3>
-                                <p>
-                                    Add your first student to get started.
-                                </p>
-                            </div>
-                        </td>
-                    </tr>
-                {% endif %}
-                </tbody>
-            </table>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ student[6]|lower }}">
+                                    {{ student[6] or 'Active' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="action-btn edit-btn" 
+                                            onclick='openEditModal({id: "{{ student[0] }}", name: "{{ student[1]|escape }}", age: "{{ student[2] }}", department: "{{ student[3]|escape }}", email: "{{ student[4]|escape }}", gpa: "{{ student[5] }}", status: "{{ student[6] }}"})'
+                                            title="Edit Student">
+                                        <span class="material-icons-round">edit</span>
+                                    </button>
+                                    <a href="/delete/{{ student[0] }}" 
+                                       class="action-btn delete-btn" 
+                                       onclick="return confirm('Are you sure you want to delete {{ student[1] }}?')"
+                                       title="Delete Student">
+                                        <span class="material-icons-round">delete</span>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty-state">
+                                    <span class="material-icons-round">face</span>
+                                    <h3>No Students Found</h3>
+                                    <p>Try altering your search filters or add a new student record.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- ==========================
+            Add / Edit Student Modal
+    =========================== -->
+    <div class="modal-overlay" id="studentModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add New Student</h3>
+                <button class="close-modal-btn" id="closeModalBtn">&times;</button>
+            </div>
+            
+            <form id="studentForm" action="/add" method="POST">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="studentName">Student Name</label>
+                        <input type="text" id="studentName" name="name" placeholder="John Doe" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentEmail">Email Address</label>
+                        <input type="email" id="studentEmail" name="email" placeholder="johndoe@university.edu" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentAge">Age</label>
+                        <input type="number" id="studentAge" name="age" min="15" max="100" placeholder="20" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentGpa">GPA (0.00 - 4.00)</label>
+                        <input type="number" id="studentGpa" name="gpa" min="0" max="4" step="0.01" placeholder="3.85" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentDept">Department</label>
+                        <input type="text" id="studentDept" name="department" placeholder="Computer Science" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentStatus">Enrollment Status</label>
+                        <select id="studentStatus" name="status">
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                            <option value="Suspended">Suspended</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="secondary-btn" id="cancelFormBtn">Cancel</button>
+                    <button type="submit" class="primary-btn" id="submitFormBtn">Add Student</button>
+                </div>
+            </form>
         </div>
     </div>
-</div>
 
-<script>
-const searchInput = document.getElementById("searchInput");
+    <!-- Department stats JSON Bridge for Chart.js -->
+    <script id="dept-stats-data" type="application/json">
+        [
+            {% for row in dept_stats %}
+            {
+                "department": "{{ row[0]|escape }}",
+                "count": {{ row[1] }},
+                "avg_gpa": {{ row[2] }}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]
+    </script>
 
-searchInput.addEventListener("keyup", function(){
-    const filter = this.value.toLowerCase();
-    const rows = document.querySelectorAll("#studentTable tbody tr");
-    rows.forEach(row=>{
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(filter)
-            ? ""
-            : "none";
-    });
-});
+    <!-- JS Fallback for edit redirect -->
+    {% if edit_student %}
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            openEditModal({
+                id: "{{ edit_student[0] }}",
+                name: "{{ edit_student[1]|escape }}",
+                age: "{{ edit_student[2] }}",
+                department: "{{ edit_student[3]|escape }}",
+                email: "{{ edit_student[4]|escape }}",
+                gpa: "{{ edit_student[5] }}",
+                status: "{{ edit_student[6] }}"
+            });
+        });
+    </script>
+    {% endif %}
 
-function filterDepartment(){
-    const department =
-        document.getElementById("departmentFilter").value;
-    let url="/";
-    if(department){
-        url += "?department="+department;
-    }
-    window.location.href=url;
-}
-
-setTimeout(()=>{
-    const flash=document.querySelector(".flash");
-    if(flash){
-        flash.style.opacity="0";
-        setTimeout(()=>{
-            flash.remove();
-        },500);
-    }
-},3000);
-
-setTimeout(function(){
-
-    const toast=document.querySelector(".toast-container");
-
-    if(toast){
-
-        toast.style.opacity="0";
-
-        toast.style.transition=".5s";
-
-        setTimeout(()=>{
-
-            toast.remove();
-
-        },500);
-
-    }
-
-},3000);
-</script>
+    <!-- Custom Script -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

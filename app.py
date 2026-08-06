@@ -1095,6 +1095,130 @@ def delete_announcement(id):
     return redirect(url_for('announcements_dashboard'))
 
 # ==========================================
+# ANNOUNCEMENTS API ENDPOINTS
+# ==========================================
+@app.route("/api/announcements")
+@login_required
+def api_get_announcements():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT a.id, a.title, a.description, a.category, a.priority, a.created_at, a.expiry_date, u.username, a.scheduled_date
+        FROM announcements a
+        LEFT JOIN users u ON a.author_id = u.id
+        ORDER BY a.created_at DESC
+    """)
+    announcements = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    result = []
+    for row in announcements:
+        result.append({
+            'id': row[0],
+            'title': row[1],
+            'description': row[2],
+            'category': row[3],
+            'priority': row[4],
+            'created_at': row[5].strftime('%Y-%m-%d %H:%M') if row[5] else None,
+            'expiry_date': row[6].strftime('%Y-%m-%d %H:%M') if row[6] else None,
+            'author': row[7] or 'System',
+            'scheduled_date': row[8].strftime('%Y-%m-%d %H:%M') if row[8] else None,
+            'is_author': (row[7] == session['user']['username'] or session['user']['role'] == 'Admin')
+        })
+    return jsonify({'status': 'success', 'announcements': result})
+
+@app.route("/api/announcements/add", methods=["POST"])
+@login_required
+def api_add_announcement():
+    username = session['user']['username']
+    author_id = session['user']['id']
+    
+    if request.is_json:
+        data = request.json
+    else:
+        data = request.form
+        
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+    category = data.get("category", "General").strip()
+    priority = data.get("priority", "Low").strip()
+    scheduled_val = data.get("scheduled_date", "")
+    expiry_val = data.get("expiry_date", "")
+
+    if not title or not description:
+        return jsonify({'status': 'error', 'message': 'Title and description are required.'}), 400
+
+    scheduled_date = scheduled_val if scheduled_val else None
+    expiry_date = expiry_val if expiry_val else None
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO announcements (title, description, category, priority, scheduled_date, expiry_date, author_id)
+            VALUES (%s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), %s, %s)
+            RETURNING id;
+        """, (title, description, category, priority, scheduled_date, expiry_date, author_id))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        
+        cur.execute("SELECT id FROM users")
+        faculty_ids = [row[0] for row in cur.fetchall()]
+        for fid in faculty_ids:
+            create_notification(fid, 'Announcement', f"New notice: {title}")
+            
+        log_activity("Announcement Created", f"Posted announcement: {title}", username)
+        return jsonify({
+            'status': 'success', 
+            'message': 'Announcement published successfully!',
+            'announcement': {
+                'id': new_id,
+                'title': title,
+                'description': description,
+                'category': category,
+                'priority': priority,
+                'created_at': 'Just now',
+                'author': username
+            }
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': f'Failed to post announcement: {str(e)}'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/api/announcements/delete/<int:id>", methods=["POST"])
+@login_required
+def api_delete_announcement(id):
+    username = session['user']['username']
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT author_id FROM announcements WHERE id = %s", (id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'status': 'error', 'message': 'Announcement not found.'}), 404
+            
+        author_id = row[0]
+        if author_id != session['user']['id'] and session['user']['role'] != 'Admin':
+            return jsonify({'status': 'error', 'message': 'You do not have permission to delete this announcement.'}), 403
+
+        cur.execute("DELETE FROM announcements WHERE id = %s", (id,))
+        conn.commit()
+        log_activity("Announcement Deleted", f"Deleted announcement ID: {id}", username)
+        return jsonify({'status': 'success', 'message': 'Announcement removed successfully.'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': f'Failed to delete announcement: {str(e)}'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================
 # SYSTEM NOTIFICATIONS ENDPOINTS
 # ==========================================
 @app.route("/notifications/mark-read/<int:id>", methods=["POST"])

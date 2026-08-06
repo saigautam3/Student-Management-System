@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StudentSphere | Enterprise ERP Portal</title>
+    <title>StudentSphere | Enterprise Faculty Portal</title>
     
     <!-- Google Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -65,6 +65,10 @@
                     <span class="material-icons-round">domain</span>
                     <span>Departments</span>
                 </a>
+                <a href="/announcements" class="menu-item" id="menu-announcements">
+                    <span class="material-icons-round">campaign</span>
+                    <span>Announcements</span>
+                </a>
                 <a href="/settings" class="menu-item" id="menu-settings">
                     <span class="material-icons-round">settings</span>
                     <span>Settings</span>
@@ -76,7 +80,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <p class="user-info">Logged in as: <br><strong>{{ session['user']['username'] }}</strong></p>
+                <p class="user-info">Faculty Member: <br><strong>{{ session['user']['username'] }}</strong></p>
             </div>
         </aside>
 
@@ -93,6 +97,44 @@
                 </div>
                 
                 <div class="nav-controls">
+                    <!-- Notification Bell -->
+                    <div class="notification-bell-container" id="notifBellContainer" style="position:relative;">
+                        <button class="theme-toggle-btn" id="notifBellBtn" title="Notifications">
+                            <span class="material-icons-round">notifications</span>
+                            {% if unread_notifications_count > 0 %}
+                            <span class="notification-badge" id="notifBadgeCount" style="position:absolute; top:-4px; right:-4px; background:var(--danger); color:var(--text-inverse); border-radius:50%; width:16px; height:16px; font-size:9px; font-weight:bold; display:flex; align-items:center; justify-content:center;">{{ unread_notifications_count }}</span>
+                            {% endif %}
+                        </button>
+                        
+                        <!-- Notifications Dropdown Popover -->
+                        <div class="notif-dropdown" id="notifDropdown" style="display:none; position:absolute; right:0; top:50px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); box-shadow:var(--shadow-lg); width:320px; max-height:400px; overflow-y:auto; z-index:999; padding:15px; flex-direction:column; gap:12px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:8px; margin-bottom:8px;">
+                                <h4 style="font-size:13px; font-weight:700;">Confidential Alerts</h4>
+                                <button onclick="clearAllNotifs()" style="background:none; border:none; color:var(--primary); font-size:10px; font-weight:600; cursor:pointer;">Clear All</button>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:10px;" id="notifList">
+                                {% if notifications %}
+                                    {% for notif in notifications %}
+                                    <div class="notif-item {% if not notif[3] %}notif-unread{% endif %}" id="notif-item-{{ notif[0] }}" style="font-size:12px; border-bottom:1px solid var(--border-color); padding-bottom:8px; display:flex; flex-direction:column; gap:4px; position:relative;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <span style="font-weight:700; color:var(--primary);">{{ notif[1] }}</span>
+                                            <span style="font-size:9px; color:var(--text-muted);">{{ notif[4].strftime('%m-%d %H:%M') }}</span>
+                                        </div>
+                                        <p style="color:var(--text-main); padding-right:20px; font-size:11px; line-height:1.4;">{{ notif[2] }}</p>
+                                        {% if not notif[3] %}
+                                        <button onclick="markNotifRead('{{ notif[0] }}')" style="position:absolute; right:0; bottom:8px; background:none; border:none; color:var(--success); font-size:14px; cursor:pointer;" title="Mark as Read">
+                                            <span class="material-icons-round" style="font-size:14px;">done</span>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No notifications.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
                     <button class="theme-toggle-btn" id="themeToggle" title="Toggle Theme">
                         <span class="material-icons-round" id="themeIcon">dark_mode</span>
                     </button>
@@ -137,6 +179,18 @@
                         </div>
                     </div>
 
+                    <!-- At-Risk Students -->
+                    <div class="stat-card" style="border-left: 4px solid var(--danger);">
+                        <div class="stat-info">
+                            <span class="stat-label" style="color:var(--danger)">At-Risk Students</span>
+                            <h2 class="stat-value">{{ high_risk_count + medium_risk_count }}</h2>
+                            <p class="subtitle" style="font-size:11px; margin-top:2px;">{{ high_risk_count }} High Risk | {{ medium_risk_count }} Med Risk</p>
+                        </div>
+                        <div class="stat-icon-wrapper" style="background: rgba(239, 68, 68, 0.1); color: var(--danger)">
+                            <span class="material-icons-round">crisis_alert</span>
+                        </div>
+                    </div>
+
                     <!-- Top Performer -->
                     <div class="stat-card">
                         <div class="stat-info">
@@ -158,22 +212,125 @@
                             <span class="material-icons-round">trending_down</span>
                         </div>
                     </div>
+                </section>
 
-                    <!-- Recently Added -->
-                    <div class="stat-card">
-                        <div class="stat-info">
-                            <span class="stat-label">Recently Added</span>
-                            <h2 class="stat-value" style="font-size: 1.15rem; margin-top: 5px;">{{ recently_added }}</h2>
+                <!-- AI Insights & Leaderboard Panel -->
+                <section class="analytics-grid" style="grid-template-columns: 1fr 1fr;">
+                    <!-- AI Insights -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--primary)">psychology</span>
+                                <span>AI Academic Insights</span>
+                            </h3>
                         </div>
-                        <div class="stat-icon-wrapper dept-color">
-                            <span class="material-icons-round">person_add</span>
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            {% if insights %}
+                                {% for insight in insights %}
+                                <div style="display:flex; gap:12px; padding:15px; border-radius:var(--radius-md); background: rgba(0,0,0,0.02); border:1px solid var(--border-color); border-left: 4px solid var(--{% if insight.class == 'danger' %}danger{% elif insight.class == 'warning' %}warning{% elif insight.class == 'info' %}info{% else %}success{% endif %});">
+                                    <span class="material-icons-round" style="color:var(--{% if insight.class == 'danger' %}danger{% elif insight.class == 'warning' %}warning{% elif insight.class == 'info' %}info{% else %}success{% endif %}); font-size:22px;">{{ insight.icon }}</span>
+                                    <div>
+                                        <h4 style="font-size:13px; font-weight:700; color:var(--text-main);">{{ insight.title }}</h4>
+                                        <p style="font-size:12px; color:var(--text-muted); margin-top:4px; line-height:1.4;">{{ insight.desc }}</p>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <p style="font-size:13px; color:var(--text-muted); text-align:center;">No insights available yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Department Performance Leaderboard -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--warning)">emoji_events</span>
+                                <span>Department Leaderboard</span>
+                            </h3>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            {% if leaderboard %}
+                                {% for dept in leaderboard %}
+                                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-radius:var(--radius-md); background: rgba(0,0,0,0.02); border:1px solid var(--border-color);">
+                                    <div style="display:flex; align-items:center; gap:15px;">
+                                        <span style="font-size:16px; font-weight:800; color:var(--text-muted);">#{{ dept.rank }}</span>
+                                        <div>
+                                            <h4 style="font-size:13px; font-weight:700;">{{ dept.name }} ({{ dept.code }})</h4>
+                                            <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">{{ dept.student_count }} Students | Top GPA: {{ "%.2f"|format(dept.max_gpa) }}</p>
+                                        </div>
+                                    </div>
+                                    <div style="text-align:right;">
+                                        <span class="gpa-badge {% if dept.avg_gpa >= 8.5 %}gpa-excellent{% elif dept.avg_gpa >= 7.5 %}gpa-good{% else %}gpa-average{% endif %}" style="font-size:12px; font-weight:bold;">
+                                            {{ "%.2f"|format(dept.avg_gpa) }}
+                                        </span>
+                                        <p style="font-size:10px; color:var(--text-muted); margin-top:4px;">Score: {{ dept.score }}%</p>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <p style="font-size:13px; color:var(--text-muted); text-align:center;">No departments mapped yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Academic Risk Predictions & Faculty bulletins -->
+                <section class="analytics-grid" style="grid-template-columns: 1fr 1fr; margin-top: -10px;">
+                    <!-- Academic Risk Predictor list -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--danger)">gavel</span>
+                                <span>Academic Risk Interventions (Priority)</span>
+                            </h3>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:10px; max-height:280px; overflow-y:auto; padding-right:5px;">
+                            {% if at_risk_list %}
+                                {% for risk in at_risk_list %}
+                                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 15px; border-radius:var(--radius-md); background: rgba(0,0,0,0.02); border:1px solid var(--border-color); border-left:4px solid var(--danger);">
+                                    <div>
+                                        <h4 style="font-size:13px; font-weight:700;">{{ risk.name }}</h4>
+                                        <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">{{ risk.department }} | GPA: {{ "%.2f"|format(risk.gpa) }}</p>
+                                        <p style="font-size:10px; color:var(--danger); margin-top:2px; font-weight:500;">Reason: {{ risk.reason }}</p>
+                                    </div>
+                                    <span class="status-badge" style="background:var(--danger-bg); color:var(--danger-text); font-size:10px; padding:3px 8px;">{{ risk.level }} Risk</span>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No high academic risk students flagged.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Announcements bulletins -->
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <h3 style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons-round" style="color:var(--primary)">campaign</span>
+                                <span>Faculty Bulletins</span>
+                            </h3>
+                            <a href="/announcements" style="font-size:12px; font-weight:600; color:var(--primary); text-decoration:none;">View All</a>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:10px; max-height:280px; overflow-y:auto; padding-right:5px;">
+                            {% if announcements %}
+                                {% for notice in announcements %}
+                                <div style="padding:12px 15px; border-radius:var(--radius-md); background: rgba(0,0,0,0.02); border:1px solid var(--border-color); position:relative;">
+                                    <span class="status-badge" style="position:absolute; right:15px; top:12px; font-size:9px; background: {% if notice[4] == 'High' %}var(--danger-bg){% elif notice[4] == 'Medium' %}var(--warning-bg){% else %}var(--info-bg){% endif %}; color: {% if notice[4] == 'High' %}var(--danger-text){% elif notice[4] == 'Medium' %}var(--warning-text){% else %}var(--info-text){% endif %}; padding: 3px 8px;">{{ notice[4] }}</span>
+                                    <h4 style="font-size:13px; font-weight:700; width:80%;">{{ notice[1] }}</h4>
+                                    <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">{{ notice[3] }} | {{ notice[5].strftime('%m-%d %H:%M') }}</p>
+                                    <p style="font-size:12px; color:var(--text-main); margin-top:6px; line-height:1.4;">{{ notice[2] }}</p>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No bulletins posted.</div>
+                            {% endif %}
                         </div>
                     </div>
                 </section>
 
                 <!-- Charts Analytics Grid -->
                 <section class="analytics-grid">
-                    <!-- Row 1: Dept Distribution & Avg GPA -->
                     <div class="analytics-card">
                         <div class="analytics-header"><h3>Department Distribution</h3></div>
                         <div class="chart-container"><canvas id="deptDistributionChart"></canvas></div>
@@ -184,7 +341,6 @@
                         <div class="chart-container"><canvas id="deptGpaChart"></canvas></div>
                     </div>
 
-                    <!-- Row 2: GPA Distribution & Status Distribution -->
                     <div class="analytics-card">
                         <div class="analytics-header"><h3>GPA Range Distribution</h3></div>
                         <div class="chart-container"><canvas id="gpaDistributionChart"></canvas></div>
@@ -195,7 +351,6 @@
                         <div class="chart-container"><canvas id="statusDistributionChart"></canvas></div>
                     </div>
 
-                    <!-- Row 3: Age Distribution & Monthly Growth -->
                     <div class="analytics-card">
                         <div class="analytics-header"><h3>Age Distribution</h3></div>
                         <div class="chart-container"><canvas id="ageDistributionChart"></canvas></div>
@@ -209,11 +364,19 @@
 
                 <!-- Recent Activity Log section -->
                 <section class="main-card">
-                    <div class="analytics-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px;">
+                    <div class="analytics-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
                         <h3 style="display: flex; align-items: center; gap: 8px;">
                             <span class="material-icons-round" style="color: var(--primary)">history</span>
-                            <span>System Activity Log</span>
+                            <span>Faculty Activity Log Timeline</span>
                         </h3>
+                        
+                        <div class="select-wrapper">
+                            <select id="timelineFilterSelect" onchange="filterTimelineLogs()" style="padding: 6px 12px; font-size:12px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-sm); outline:none; color:var(--text-main);">
+                                <option value="Today" {% if timeline_filter == 'Today' %}selected{% endif %}>Today</option>
+                                <option value="This Week" {% if timeline_filter == 'This Week' %}selected{% endif %}>This Week</option>
+                                <option value="This Month" {% if timeline_filter == 'This Month' %}selected{% endif %}>This Month</option>
+                            </select>
+                        </div>
                     </div>
                     {% if activities %}
                         <div class="activity-timeline-horizontal">
@@ -226,6 +389,7 @@
                                 <div class="timeline-body-h">
                                     <strong>{{ act[0] }}</strong>
                                     <p>{{ act[1] }}</p>
+                                    <span class="subtitle" style="font-size:10px; margin-top:6px; display:inline-block;">Faculty: <strong>{{ act[3] or 'System' }}</strong></span>
                                 </div>
                             </div>
                             {% endfor %}
@@ -233,7 +397,7 @@
                     {% else %}
                         <div class="empty-state">
                             <span class="material-icons-round">history</span>
-                            <p>No system activity logged yet.</p>
+                            <p>No activity logged for this time range.</p>
                         </div>
                     {% endif %}
                 </section>
@@ -246,16 +410,15 @@
                     <!-- Advanced Filters Toolbar -->
                     <div class="filters-toolbar">
                         <form id="filtersForm" method="GET" action="/">
-                            <!-- Store current anchor -->
                             <input type="hidden" name="filter_anchor" value="registry-section">
                             
                             <div class="filters-grid">
                                 <!-- Search -->
                                 <div class="filter-group">
-                                    <label for="regSearchInput">Search Name</label>
+                                    <label for="regSearchInput">Search Name / Notes</label>
                                     <div class="filter-input-wrapper">
                                         <span class="material-icons-round">search</span>
-                                        <input type="text" id="regSearchInput" name="search" placeholder="Type name..." value="{{ search }}">
+                                        <input type="text" id="regSearchInput" name="search" placeholder="Type query..." value="{{ search }}">
                                     </div>
                                 </div>
 
@@ -333,7 +496,7 @@
                                     <button onclick="exportTableToCSV()"><span class="material-icons-round">grid_on</span> CSV Spreadsheet</button>
                                     <button onclick="exportTableToExcel()"><span class="material-icons-round">table_chart</span> Excel Spreadsheet</button>
                                     <button onclick="exportTableToPDF()"><span class="material-icons-round">picture_as_pdf</span> PDF Document</button>
-                                    <button onclick="printReport()"><span class="material-icons-round">print</span> Print Report</button>
+                                    <button onclick="window.location.href='/reports'"><span class="material-icons-round">print</span> Professional Report</button>
                                 </div>
                             </div>
 
@@ -350,7 +513,7 @@
                         <div class="bulk-toolbar" id="bulkToolbar">
                             <span class="bulk-selected-label"><strong id="bulkSelectedCount">0</strong> students selected</span>
                             <div class="bulk-actions-wrapper">
-                                <select name="status_value" id="bulkStatusSelect" class="secondary-btn" style="padding: 6px 12px; background: var(--bg-card);">
+                                <select name="status_value" id="bulkStatusSelect" class="secondary-btn" style="padding: 6px 12px; background: var(--bg-card); color:var(--text-main);">
                                     <option value="">Update Status...</option>
                                     <option value="Active">Active</option>
                                     <option value="Inactive">Inactive</option>

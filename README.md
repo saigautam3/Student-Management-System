@@ -1,6 +1,6 @@
-# 🎓 StudentSphere - Faculty Management & Analytics Portal
+# 🎓 StudentSphere - Enterprise Faculty Portal & ERP
 
-StudentSphere is a modern, production-quality academic ERP and analytics portal designed for faculty members to manage student records, monitor departmental statistics, and log actions. Built with **Flask** and **PostgreSQL**, it demonstrates a complete database-driven CRUD workflow with a secure authentication system, real-time client-side interactivity, and dynamic charts.
+StudentSphere is a modern, production-quality Academic ERP and analytics portal designed for faculty members to manage student records, monitor departmental statistics, log transactions, and predict academic risks. Built with **Flask** and **PostgreSQL**, it demonstrates a complete database-driven CRUD workflow with a secure authentication system, real-time client-side interactivity, and dynamic charts.
 
 ---
 
@@ -10,6 +10,7 @@ StudentSphere is a modern, production-quality academic ERP and analytics portal 
   - *Total Students* enrolled in the system.
   - *Active / Inactive / Graduated* student ratios.
   - *Average GPA* of all students (automatically calculated).
+  - *At-Risk Students* counts (total needing attention).
   - *Top Performer* and *Lowest GPA* metrics.
   - *Recently Added Student* tracker.
 - **B - Bar, Doughnut & Line Analytics Charts**: Integrated **Chart.js** dashboard featuring:
@@ -26,7 +27,7 @@ StudentSphere is a modern, production-quality academic ERP and analytics portal 
   - Export filtered rows directly to **Excel (`.xlsx`)** spreadsheets using SheetJS.
   - Compile the registry table into a **PDF** report document using `html2pdf.js`.
   - Print report layout stylesheets.
-- **F - Flash Notifications (Toasts)**: System operations trigger modern, self-dismissing toast notifications colored by type (success, info, danger, warning).
+- **F - Faculty Announcement Board**: Dedicated Announcements module. Faculty can publish, schedule, and categorize bulletins (Academic, Examination, Placement, Workshop, Holiday, Emergency, General) with priority highlights.
 - **G - GPA Scale (0.00 to 10.00)**: Supports standard 10-point grading scales. GPAs are highlighted with color-coded badges based on performance:
   - `gpa-excellent` (Green badge): $\ge$ 8.50
   - `gpa-good` (Blue badge): 7.50 to 8.49
@@ -35,9 +36,11 @@ StudentSphere is a modern, production-quality academic ERP and analytics portal 
 - **I - Interactive Modals**: Slid-in overlay modal forms for adding/editing students and departments, and a custom confirmation modal replacing standard browser `confirm()` prompts.
 - **L - Live Database Syncing**: Fully backed by PostgreSQL to ensure immediate data updates and ACID transaction compliance.
 - **M - Multi-Criteria Filter Grid**: Dynamic filter toolbar allowing users to query records by Name, Department, Enrollment Status, Age, and GPA range simultaneously.
-- **P - Profile Pages & Picture Upload**: Renders circular profile avatars or uploaded profile photos on individual student profile screens showing academic records and historical logs.
-- **R - Responsive Grid Layout**: Built using a modern CSS Grid/Flexbox design system that adjusts seamlessly to mobile, tablet, and desktop screens.
+- **N - Notification Center**: Real-time system events (student additions, new bulletins, low-GPA alerts) trigger notices under a bell icon popover in the top navbar. Includes unread badges, mark-as-read, and clear-all operations.
+- **P - Private Faculty Notes**: A secure remarks manager where faculty can log, read, and delete confidential student evaluations (performance remarks, advisory logs) not exposed to students.
+- **R - Risk Prediction Analyzer**: Academic Risk Interventions engine that automatically classifies students into Low, Medium, and High Risk status based on CGPA and enrollment health.
 - **S - Secure Authentication Settings**: Features password validation filters (at least 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char) and options to update Faculty Profile usernames and emails directly from the portal.
+- **T - Transaction Timeline Logs**: Auto-logs all student history events (admission, transfers, GPA changes, remarks added) on a clean vertical timeline. Also tracks administrative session history on the dashboard with date-range filters (Today, Week, Month).
 
 ---
 
@@ -77,6 +80,8 @@ Student-Management/
     ├── login.html          # Secure faculty portal login screen
     ├── profile.html        # Detailed student information & timeline records
     ├── departments.html    # Academic department list, statistics, and CRUD forms
+    ├── announcements.html  # Notice creation & publication board
+    ├── reports.html        # Branded, print-ready overall academic reports
     └── settings.html       # Change password & update profile settings panel
 ```
 
@@ -151,6 +156,49 @@ pip install -r requirements.txt
        id SERIAL PRIMARY KEY,
        action VARCHAR(100) NOT NULL,
        details TEXT,
+       faculty_username VARCHAR(50),
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+
+   -- 5. Student Notes table
+   CREATE TABLE student_notes (
+       id SERIAL PRIMARY KEY,
+       student_id INT REFERENCES students(id) ON DELETE CASCADE,
+       faculty_id INT REFERENCES users(id) ON DELETE SET NULL,
+       note TEXT NOT NULL,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+
+   -- 6. Student Academic Timeline table
+   CREATE TABLE student_timeline (
+       id SERIAL PRIMARY KEY,
+       student_id INT REFERENCES students(id) ON DELETE CASCADE,
+       event_type VARCHAR(50) NOT NULL,
+       description TEXT NOT NULL,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+
+   -- 7. Announcements table
+   CREATE TABLE announcements (
+       id SERIAL PRIMARY KEY,
+       title VARCHAR(150) NOT NULL,
+       description TEXT NOT NULL,
+       category VARCHAR(50) NOT NULL,
+       priority VARCHAR(20) NOT NULL,
+       scheduled_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       expiry_date TIMESTAMP,
+       author_id INT REFERENCES users(id) ON DELETE SET NULL,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+
+   -- 8. Notifications table
+   CREATE TABLE notifications (
+       id SERIAL PRIMARY KEY,
+       user_id INT REFERENCES users(id) ON DELETE CASCADE,
+       type VARCHAR(50) NOT NULL,
+       message TEXT NOT NULL,
+       is_read BOOLEAN DEFAULT FALSE,
        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
    ```

@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash
 from database import get_connection
 
 def run_migration():
-    print("Starting database migration...")
+    print("Starting database migration for Faculty ERP features...")
     conn = get_connection()
     cur = conn.cursor()
 
@@ -18,18 +18,22 @@ def run_migration():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        print("- 'users' table created or already exists.")
+        print("- 'users' table checked.")
 
         # 2. Insert default faculty user if none exists
-        cur.execute("SELECT COUNT(*) FROM users WHERE username = 'faculty'")
-        if cur.fetchone()[0] == 0:
+        cur.execute("SELECT id FROM users WHERE username = 'faculty'")
+        user_record = cur.fetchone()
+        if not user_record:
             hashed_pwd = generate_password_hash('FacultyPass123!')
             cur.execute("""
                 INSERT INTO users (username, password_hash, email)
                 VALUES (%s, %s, %s)
+                RETURNING id;
             """, ('faculty', hashed_pwd, 'faculty@university.edu'))
+            faculty_user_id = cur.fetchone()[0]
             print("- Default faculty user ('faculty' / 'FacultyPass123!') created.")
         else:
+            faculty_user_id = user_record[0]
             print("- Default faculty user already exists.")
 
         # 3. Create departments table
@@ -42,7 +46,7 @@ def run_migration():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        print("- 'departments' table created or already exists.")
+        print("- 'departments' table checked.")
 
         # 4. Create activity_logs table
         cur.execute("""
@@ -53,7 +57,16 @@ def run_migration():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        print("- 'activity_logs' table created or already exists.")
+        print("- 'activity_logs' table checked.")
+
+        # Add faculty_username column if missing
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'activity_logs' AND column_name = 'faculty_username';
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE activity_logs ADD COLUMN faculty_username VARCHAR(50);")
+            print("- Column 'faculty_username' added to 'activity_logs' table.")
 
         # 5. Check students table and add new columns if missing
         # Add created_at column
@@ -95,7 +108,6 @@ def run_migration():
             existing_depts = [row[0] for row in cur.fetchall()]
 
             for dept_name in existing_depts:
-                # Generate a code like CSE, CSM, CSD or similar
                 code = dept_name.strip().upper()[:20]
                 cur.execute("SELECT id FROM departments WHERE name = %s OR code = %s", (dept_name, code))
                 exists = cur.fetchone()
@@ -109,25 +121,122 @@ def run_migration():
                 else:
                     dept_id = exists[0]
 
-                # Update students with this department_id
                 cur.execute("""
                     UPDATE students SET department_id = %s
                     WHERE department = %s;
                 """, (dept_id, dept_name))
             
-            # Now drop the old text column
             cur.execute("ALTER TABLE students DROP COLUMN department;")
-            print("- Migration complete: text 'department' column dropped and data normalized.")
+            print("- Migration complete: text 'department' column dropped.")
 
         # 7. Update status check constraint (Active, Inactive, Graduated)
-        # Drop existing constraint if any, and create a new check constraint
-        # To be safe, we can try dropping potential constraints, or just run a try/catch to add check constraint
         try:
             cur.execute("ALTER TABLE students DROP CONSTRAINT IF EXISTS students_status_check;")
             cur.execute("ALTER TABLE students ADD CONSTRAINT students_status_check CHECK (status IN ('Active', 'Inactive', 'Graduated'));")
-            print("- Status check constraint updated to allow ('Active', 'Inactive', 'Graduated').")
+            print("- Status check constraint updated.")
         except Exception as ec:
-            print("- Skipping constraint alteration (already matches or different name):", ec)
+            print("- Skipping constraint alteration:", ec)
+
+        # 8. Create new tables for ERP features
+        # student_notes
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS student_notes (
+                id SERIAL PRIMARY KEY,
+                student_id INT REFERENCES students(id) ON DELETE CASCADE,
+                faculty_id INT REFERENCES users(id) ON DELETE SET NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        print("- 'student_notes' table checked.")
+
+        # student_timeline
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS student_timeline (
+                id SERIAL PRIMARY KEY,
+                student_id INT REFERENCES students(id) ON DELETE CASCADE,
+                event_type VARCHAR(50) NOT NULL,
+                description TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        print("- 'student_timeline' table checked.")
+
+        # announcements
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(150) NOT NULL,
+                description TEXT NOT NULL,
+                category VARCHAR(50) NOT NULL,
+                priority VARCHAR(20) NOT NULL,
+                scheduled_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expiry_date TIMESTAMP,
+                author_id INT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        print("- 'announcements' table checked.")
+
+        # notifications
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(50) NOT NULL,
+                message TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        print("- 'notifications' table checked.")
+
+        # 9. Seed Mock/Demo Data
+        # Seed announcements
+        cur.execute("SELECT COUNT(*) FROM announcements")
+        if cur.fetchone()[0] == 0:
+            cur.execute("""
+                INSERT INTO announcements (title, description, category, priority, author_id)
+                VALUES 
+                ('Final Examinations Schedule', 'The end-semester examinations will commence from September 1st, 2026. Detailed schedules will be sent shortly.', 'Examination', 'High', %s),
+                ('AI & ML Placement Drive', 'Wipro is organizing a recruitment drive for final-year students on August 20th. Registration ends this Friday.', 'Placement', 'High', %s),
+                ('Annual Tech Symposium', 'Call for paper submission and prototype exhibitions for the upcoming TechVeda 2026 symposium is now open.', 'Workshop', 'Medium', %s);
+            """, (faculty_user_id, faculty_user_id, faculty_user_id))
+            print("- Seeded initial mock announcements.")
+
+        # Seed notifications
+        cur.execute("SELECT COUNT(*) FROM notifications")
+        if cur.fetchone()[0] == 0:
+            cur.execute("""
+                INSERT INTO notifications (user_id, type, message)
+                VALUES 
+                (%s, 'System Alert', 'Welcome to StudentSphere Faculty ERP Portal! Check your settings to customize your account.'),
+                (%s, 'Announcement', 'New placement drive announcement has been posted: AI & ML Placement Drive.');
+            """, (faculty_user_id, faculty_user_id))
+            print("- Seeded initial mock notifications.")
+
+        # Seed timeline and notes for existing students
+        cur.execute("SELECT id, name, gpa FROM students")
+        students_list = cur.fetchall()
+        for student in students_list:
+            sid, name, gpa = student
+            
+            # Seed admission event in timeline if none exists
+            cur.execute("SELECT COUNT(*) FROM student_timeline WHERE student_id = %s", (sid,))
+            if cur.fetchone()[0] == 0:
+                cur.execute("""
+                    INSERT INTO student_timeline (student_id, event_type, description)
+                    VALUES (%s, 'Admission', %s)
+                """, (sid, f"Student {name} registered in system with initial GPA of {gpa}"))
+                
+            # Seed initial notes if none exists
+            cur.execute("SELECT COUNT(*) FROM student_notes WHERE student_id = %s", (sid,))
+            if cur.fetchone()[0] == 0:
+                cur.execute("""
+                    INSERT INTO student_notes (student_id, faculty_id, note)
+                    VALUES (%s, %s, %s)
+                """, (sid, faculty_user_id, "Demonstrates consistent performance. Advised to participate in upcoming workshops."))
 
         conn.commit()
         print("Database migration completed successfully!")

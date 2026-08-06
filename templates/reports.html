@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Report | StudentSphere ERP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .report-page {
+            max-width: 1000px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 50px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-md);
+            color: #1e293b !important;
+        }
+        .report-header {
+            border-bottom: 3px double #333;
+            padding-bottom: 25px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .report-branding {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .report-branding h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        .report-metadata {
+            text-align: right;
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .report-section-title {
+            font-size: 18px;
+            font-weight: 700;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 8px;
+            margin-top: 35px;
+            margin-bottom: 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .report-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .report-stat-card {
+            border: 1px solid #e2e8f0;
+            padding: 15px 20px;
+            border-radius: var(--radius-sm);
+            text-align: center;
+        }
+        .report-stat-card span {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .report-stat-card h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 5px;
+        }
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 30px;
+        }
+        .report-table th {
+            background: #f8fafc;
+            color: #1e293b;
+            padding: 10px 12px;
+            font-weight: 600;
+            border-bottom: 2px solid #cbd5e1;
+        }
+        .report-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .report-signature-area {
+            margin-top: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-top: 40px;
+        }
+        .signature-line {
+            width: 220px;
+            border-top: 1px solid #333;
+            text-align: center;
+            padding-top: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        /* Buttons toolbar for preview screen */
+        .report-actions-bar {
+            max-width: 1000px;
+            margin: 30px auto -20px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @media print {
+            body {
+                background: #fff !important;
+            }
+            .report-actions-bar {
+                display: none !important;
+            }
+            .report-page {
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+            }
+        }
+    </style>
+</head>
+<body class="light-theme" style="background: var(--bg-app);">
+
+    <!-- Action bar for Faculty preview -->
+    <div class="report-actions-bar">
+        <a href="/" class="secondary-btn">
+            <span class="material-icons-round">arrow_back</span>
+            <span>Back to Dashboard</span>
+        </a>
+        <div style="display:flex; gap: 15px;">
+            <button onclick="exportReportToExcel()" class="secondary-btn" style="background:#fff;">
+                <span class="material-icons-round">table_chart</span>
+                <span>Export Excel</span>
+            </button>
+            <button onclick="exportReportToPDF()" class="secondary-btn" style="background:#fff;">
+                <span class="material-icons-round">picture_as_pdf</span>
+                <span>Export PDF</span>
+            </button>
+            <button onclick="window.print()" class="primary-btn">
+                <span class="material-icons-round">print</span>
+                <span>Print Report</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Report Sheet -->
+    <div class="report-page" id="reportContent">
+        
+        <!-- Header Branding & Meta -->
+        <div class="report-header">
+            <div class="report-branding">
+                <span class="material-icons-round" style="font-size:46px; color:#3b82f6;">school</span>
+                <div>
+                    <h2>StudentSphere University Portal</h2>
+                    <p style="font-size:14px; color:#64748b; font-weight: 500;">Faculty Operations & Academic Summary Report</p>
+                </div>
+            </div>
+            <div class="report-metadata">
+                <p><strong>Generated:</strong> {{ current_date }}</p>
+                <p><strong>Issued By:</strong> Faculty '{{ faculty_name }}'</p>
+                <p><strong>Status:</strong> Official Audit Copy</p>
+            </div>
+        </div>
+
+        <!-- 1. Key Statistics Dashboard -->
+        <h4 class="report-section-title">I. Summary Academic Indicators</h4>
+        <div class="report-stats-grid">
+            <div class="report-stat-card">
+                <span>Total Enrolled</span>
+                <h3>{{ total_students }}</h3>
+            </div>
+            <div class="report-stat-card">
+                <span>Active Status</span>
+                <h3>{{ active_students }}</h3>
+            </div>
+            <div class="report-stat-card">
+                <span>Average GPA</span>
+                <h3>{{ avg_gpa }}</h3>
+            </div>
+            <div class="report-stat-card">
+                <span>Departments</span>
+                <h3>{{ departments|length }}</h3>
+            </div>
+        </div>
+
+        <!-- 2. Departments Aggregates -->
+        <h4 class="report-section-title">II. Departmental Performance Breakdown</h4>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="text-align:left;">Code</th>
+                    <th style="text-align:left;">Department Name</th>
+                    <th>Student Count</th>
+                    <th>Average GPA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dept in departments %}
+                <tr>
+                    <td style="font-weight:600; text-align:left;">{{ dept[1] }}</td>
+                    <td style="text-align:left;">{{ dept[0] }}</td>
+                    <td style="text-align:center;">{{ dept[2] }} students</td>
+                    <td style="text-align:center; font-weight:700;">{{ "%.2f"|format(dept[3]|float) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- 3. Student Registry Table -->
+        <h4 class="report-section-title">III. Full Student Performance Registry</h4>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">SL</th>
+                    <th style="text-align:left;">Name</th>
+                    <th style="text-align:left;">Email</th>
+                    <th>Age</th>
+                    <th style="text-align:left;">Department</th>
+                    <th>GPA</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stud in students %}
+                <tr>
+                    <td style="text-align:center;">{{ loop.index }}</td>
+                    <td style="font-weight:600; text-align:left;">{{ stud[1] }}</td>
+                    <td style="text-align:left;">{{ stud[2] or 'N/A' }}</td>
+                    <td style="text-align:center;">{{ stud[6] }}</td>
+                    <td style="text-align:left;">{{ stud[3] or 'Unassigned' }}</td>
+                    <td style="text-align:center; font-weight:700;">{{ "%.2f"|format(stud[4]|float) }}</td>
+                    <td style="text-align:center;">{{ stud[5] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- 4. Signatures Audit block -->
+        <div class="report-signature-area">
+            <div class="signature-line">
+                Prepared By: <strong>{{ faculty_name }}</strong><br>
+                <span style="font-size:11px; color:#64748b;">Faculty ERP Administrator</span>
+            </div>
+            <div class="signature-line" style="border-top: 1px dashed #333;">
+                Verified Signature & Date
+            </div>
+        </div>
+    </div>
+
+    <!-- SheetJS & html2pdf.js for reports exports -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        function exportReportToPDF() {
+            const element = document.getElementById("reportContent");
+            const opt = {
+                margin:       0.4,
+                filename:     `Academic_Summary_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
+
+        function exportReportToExcel() {
+            // Summary Stats worksheet
+            let summaryData = [
+                ["StudentSphere Academic Report Overview"],
+                ["Generated Date", "{{ current_date }}"],
+                ["Issued By", "{{ faculty_name }}"],
+                [],
+                ["Metric Indicator", "Aggregated Value"],
+                ["Total Enrolled Students", {{ total_students }}],
+                ["Active Enrolled Students", {{ active_students }}],
+                ["Average System GPA", {{ avg_gpa }}],
+                ["Academic Departments Count", {{ departments|length }}]
+            ];
+            
+            // Department breakdown worksheet data
+            let deptData = [
+                ["Code", "Department Name", "Student Count", "Average GPA"]
+            ];
+            {% for dept in departments %}
+            deptData.push(["{{ dept[1] }}", "{{ dept[0] }}", {{ dept[2] }}, {{ dept[3]|float }}]);
+            {% endfor %}
+
+            // Students details worksheet data
+            let studData = [
+                ["SL No", "Student Name", "Email Address", "Age", "Department", "GPA Score", "Enrollment Status"]
+            ];
+            {% for stud in students %}
+            studData.push([{{ loop.index }}, "{{ stud[1] }}", "{{ stud[2] or 'N/A' }}", {{ stud[6] }}, "{{ stud[3] or 'Unassigned' }}", {{ stud[4]|float }}, "{{ stud[5] }}"]);
+            {% endfor %}
+
+            const wb = XLSX.book_new();
+            
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+            const wsDepts = XLSX.utils.aoa_to_sheet(deptData);
+            const wsStudents = XLSX.utils.aoa_to_sheet(studData);
+            
+            XLSX.book_append_sheet(wb, wsSummary, "Report Overview");
+            XLSX.book_append_sheet(wb, wsDepts, "Departments Breakdown");
+            XLSX.book_append_sheet(wb, wsStudents, "Student Registry");
+            
+            XLSX.writeFile(wb, `Academic_Summary_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        }
+    </script>
+</body>
+</html>

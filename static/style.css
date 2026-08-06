@@ -1470,3 +1470,61 @@ table tbody tr.row-selected {
         border: 1px solid #ccc;
     }
 }
+
+/* ==================================================
+   CONFIDENTIAL NOTIFICATIONS & ALERTS STYLES
+================================================== */
+.notification-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--danger);
+    color: var(--text-inverse);
+    border-radius: var(--radius-full);
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.notif-dropdown {
+    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.notif-item {
+    transition: background-color var(--transition-fast);
+}
+
+.notif-unread {
+    background-color: rgba(59, 130, 246, 0.05);
+    border-left: 3px solid var(--primary);
+    padding-left: 6px !important;
+}
+
+/* Timeline animations & styling */
+.timeline-item-h {
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.timeline-item-h:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Scrollbars styling for dropdown and Timeline widgets */
+.notif-dropdown::-webkit-scrollbar,
+.notes-timeline::-webkit-scrollbar,
+.timeline-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notif-dropdown::-webkit-scrollbar-thumb,
+.notes-timeline::-webkit-scrollbar-thumb,
+.timeline-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: var(--radius-full);
+}

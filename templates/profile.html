@@ -10,6 +10,25 @@
 </head>
 <body class="light-theme">
 
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
     <div class="app-layout">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
@@ -34,7 +53,11 @@
                     <span class="material-icons-round">domain</span>
                     <span>Departments</span>
                 </a>
-                <a href="/settings" class="menu-item" id="menu-settings">
+                <a href="/announcements" class="menu-item">
+                    <span class="material-icons-round">campaign</span>
+                    <span>Announcements</span>
+                </a>
+                <a href="/settings" class="menu-item">
                     <span class="material-icons-round">settings</span>
                     <span>Settings</span>
                 </a>
@@ -51,12 +74,12 @@
             <header class="navbar">
                 <div class="navbar-title">
                     <h2>Student Profile</h2>
-                    <p class="subtitle">Detailed Academic & Personal Records</p>
+                    <p class="subtitle">Academic ERP Registry File</p>
                 </div>
                 <div class="nav-controls">
-                    <a href="/" class="secondary-btn">
+                    <a href="/#registry-section" class="secondary-btn">
                         <span class="material-icons-round">arrow_back</span>
-                        <span>Back to Dashboard</span>
+                        <span>Back to Registry</span>
                     </a>
                 </div>
             </header>
@@ -74,7 +97,7 @@
                     </div>
                     <h2 class="profile-student-name">{{ student[1] }}</h2>
                     <span class="status-badge status-{{ student[6]|lower }}">{{ student[6] or 'Active' }}</span>
-                    <p class="profile-student-meta">Registered: {{ student[8].strftime('%B %d, %Y') if student[8] else 'N/A' }}</p>
+                    <p class="profile-student-meta">Admitted: {{ student[8].strftime('%B %d, %Y') if student[8] else 'N/A' }}</p>
                 </div>
 
                 <!-- Right Column: Academic Details -->
@@ -108,20 +131,65 @@
                     </div>
                 </div>
 
-                <!-- Bottom Column: Activity Log for this Student -->
-                <div class="profile-card logs-card">
-                    <h3>Student Activity Log</h3>
-                    {% if activities %}
-                        <div class="activity-timeline">
-                            {% for act in activities %}
-                            <div class="timeline-item">
-                                <div class="timeline-badge">
-                                    <span class="material-icons-round">history</span>
+                <!-- Bottom Left: Private Faculty Notes -->
+                <div class="profile-card details-card" style="grid-column: span 1;">
+                    <h3>📝 Private Faculty Notes</h3>
+                    
+                    <!-- Add Note Form -->
+                    <form action="/student/{{ student[0] }}/notes/add" method="POST" style="display:flex; flex-direction:column; gap:10px;">
+                        <textarea name="note" placeholder="Type confidential student remark..." rows="3" required style="width:100%; padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-app); color:var(--text-main); font-size:13px;"></textarea>
+                        <button type="submit" class="primary-btn" style="align-self:flex-start; padding: 8px 14px; font-size:12px;">
+                            <span class="material-icons-round">add</span>
+                            <span>Add Private Note</span>
+                        </button>
+                    </form>
+
+                    <!-- Notes List -->
+                    <div class="notes-timeline" style="margin-top:20px; display:flex; flex-direction:column; gap:15px; max-height: 350px; overflow-y:auto; padding-right:5px;">
+                        {% if notes %}
+                            {% for note in notes %}
+                            <div style="background: rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:15px; border-radius:var(--radius-md); position:relative;">
+                                <p style="font-size:13px; line-height: 1.5; color: var(--text-main); margin-bottom:8px;">{{ note[1] }}</p>
+                                <span class="subtitle" style="font-size:10px;">By: <strong>{{ note[3] }}</strong> | {{ note[2].strftime('%Y-%m-%d %H:%M') }}</span>
+                                <div style="position:absolute; right:10px; bottom:10px;">
+                                    <a href="/student/{{ student[0] }}/notes/delete/{{ note[0] }}" class="action-btn delete-btn" title="Delete Note" onclick="return confirm('Delete this note?')">
+                                        <span class="material-icons-round" style="font-size:14px;">delete</span>
+                                    </a>
                                 </div>
-                                <div class="timeline-body">
-                                    <span class="timeline-action">{{ act[0] }}</span>
-                                    <p class="timeline-desc">{{ act[1] }}</p>
-                                    <span class="timeline-time">{{ act[2].strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state" style="padding:20px;">
+                                <span class="material-icons-round" style="font-size:32px;">note_add</span>
+                                <p style="font-size:12px;">No faculty remarks logged yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Bottom Right: Student Academic Timeline -->
+                <div class="profile-card logs-card" style="grid-column: span 1;">
+                    <h3>Academic History Timeline</h3>
+                    {% if timeline %}
+                        <div class="activity-timeline">
+                            {% for event in timeline %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge" style="background: var(--bg-card); display:flex; align-items:center; justify-content:center; left:-29px; width:22px; height:22px; border-radius:50%; border:2px solid var(--primary); text-align:center; color: var(--primary);">
+                                    <span class="material-icons-round" style="display:inline-block; font-size:12px; font-weight:bold;">
+                                        {% if event[0] == 'Admission' %}school
+                                        {% elif event[0] == 'Department Change' %}swap_horiz
+                                        {% elif event[0] == 'GPA Update' %}stars
+                                        {% elif event[0] == 'Status Update' %}how_to_reg
+                                        {% elif event[0] == 'Faculty Remark' %}rate_review
+                                        {% else %}edit{% endif %}
+                                    </span>
+                                </div>
+                                <div class="timeline-body" style="padding-left: 10px; margin-top:-3px;">
+                                    <span class="timeline-action" style="font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;">
+                                        {{ event[0] }}
+                                    </span>
+                                    <p class="timeline-desc" style="font-size:12px; margin-top:2px;">{{ event[1] }}</p>
+                                    <span class="timeline-time" style="font-size:10px;">{{ event[2].strftime('%Y-%m-%d %H:%M:%S') }}</span>
                                 </div>
                             </div>
                             {% endfor %}
@@ -129,7 +197,7 @@
                     {% else %}
                         <div class="empty-state">
                             <span class="material-icons-round">history</span>
-                            <p>No logged activities found for this student.</p>
+                            <p>No academic timeline records logged.</p>
                         </div>
                     {% endif %}
                 </div>
@@ -144,6 +212,17 @@
             document.body.classList.add('dark-theme');
             document.body.classList.remove('light-theme');
         }
+
+        // Dismiss Toast
+        setTimeout(() => {
+            const toasts = document.querySelectorAll(".toast");
+            toasts.forEach(toast => {
+                toast.style.opacity = "0";
+                toast.style.transform = "translateX(50px)";
+                toast.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+                setTimeout(() => toast.remove(), 400);
+            });
+        }, 4000);
     </script>
 </body>
 </html>

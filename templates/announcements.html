@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Announcements Board | StudentSphere</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="light-theme">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span class="material-icons-round">
+                            {% if category == 'success' %}check_circle
+                            {% elif category == 'info' %}info
+                            {% else %}error{% endif %}
+                        </span>
+                        <div class="toast-content">{{ message }}</div>
+                        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="material-icons-round brand-logo">school</span>
+                <div>
+                    <h1>StudentSphere</h1>
+                    <p class="subtitle">Academic ERP</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="/" class="menu-item">
+                    <span class="material-icons-round">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/#registry-section" class="menu-item">
+                    <span class="material-icons-round">groups</span>
+                    <span>Student Registry</span>
+                </a>
+                <a href="/departments" class="menu-item">
+                    <span class="material-icons-round">domain</span>
+                    <span>Departments</span>
+                </a>
+                <a href="/announcements" class="menu-item active" id="menu-announcements">
+                    <span class="material-icons-round">campaign</span>
+                    <span>Announcements</span>
+                </a>
+                <a href="/settings" class="menu-item">
+                    <span class="material-icons-round">settings</span>
+                    <span>Settings</span>
+                </a>
+                <a href="/logout" class="menu-item logout-item">
+                    <span class="material-icons-round">logout</span>
+                    <span>Sign Out</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>📢 Faculty Announcement Board</h2>
+                    <p class="subtitle">Broadcast notifications and academic news to the institution</p>
+                </div>
+            </header>
+
+            <div class="profile-grid" style="grid-template-columns: 1fr 1fr;">
+                <!-- Add Announcement Form -->
+                <div class="profile-card details-card" style="grid-column: span 1;">
+                    <h3>Publish Notice</h3>
+                    
+                    <form action="/announcements/add" method="POST" style="display: flex; flex-direction: column; gap: 20px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="noticeTitle">Notice Title</label>
+                            <input type="text" id="noticeTitle" name="title" placeholder="e.g. Schedule for Final Exam" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="noticeDesc">Detailed Description</label>
+                            <textarea id="noticeDesc" name="description" placeholder="Type instructions or summary..." rows="4" required></textarea>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="noticeCategory">Category</label>
+                                <select id="noticeCategory" name="category" required>
+                                    <option value="Academic">Academic</option>
+                                    <option value="Examination">Examination</option>
+                                    <option value="Workshop">Workshop</option>
+                                    <option value="Placement">Placement</option>
+                                    <option value="Holiday">Holiday</option>
+                                    <option value="Emergency">Emergency</option>
+                                    <option value="General">General</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="noticePriority">Priority Level</label>
+                                <select id="noticePriority" name="priority" required>
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="noticeScheduled">Scheduled Publication</label>
+                                <input type="datetime-local" id="noticeScheduled" name="scheduled_date">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="noticeExpiry">Expiration Date</label>
+                                <input type="datetime-local" id="noticeExpiry" name="expiry_date">
+                            </div>
+                        </div>
+
+                        <div class="modal-actions" style="border-top: none; padding-top: 0; margin-top: 10px; justify-content: flex-start;">
+                            <button type="submit" class="primary-btn">
+                                <span class="material-icons-round">campaign</span>
+                                <span>Publish Announcement</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Recent Announcements List -->
+                <div class="profile-card details-card" style="grid-column: span 1;">
+                    <h3>Recent Announcements</h3>
+                    
+                    <div class="timeline-container" style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px; max-height: 520px; overflow-y: auto; padding-right: 5px;">
+                        {% if announcements %}
+                            {% for notice in announcements %}
+                            <div class="timeline-item-h" style="min-width: 100%; max-width: 100%; display: flex; flex-direction: column; gap: 10px; position:relative; background: var(--bg-card);">
+                                <div class="timeline-meta-h">
+                                    <span class="status-badge" style="background: {% if notice[4] == 'High' %}var(--danger-bg){% elif notice[4] == 'Medium' %}var(--warning-bg){% else %}var(--info-bg){% endif %}; color: {% if notice[4] == 'High' %}var(--danger-text){% elif notice[4] == 'Medium' %}var(--warning-text){% else %}var(--info-text){% endif %};">{{ notice[4] }} Priority</span>
+                                    <span class="timeline-time-h">{{ notice[5].strftime('%Y-%m-%d %H:%M') }}</span>
+                                </div>
+                                <div class="timeline-body-h">
+                                    <h4 style="font-size: 15px; font-weight: 700;">{{ notice[1] }}</h4>
+                                    <span class="dept-badge" style="margin-top: 4px; display: inline-block;">{{ notice[3] }}</span>
+                                    <p style="margin-top: 8px; font-size:13px; line-height: 1.5; color: var(--text-main);">{{ notice[2] }}</p>
+                                    <p class="subtitle" style="margin-top: 10px; font-size:11px;">Author: <strong>{{ notice[7] }}</strong> | Scheduled: {{ notice[8].strftime('%m-%d %H:%M') }}</p>
+                                </div>
+                                <div style="position: absolute; right: 15px; bottom: 15px;">
+                                    <a href="/announcements/delete/{{ notice[0] }}" class="action-btn delete-btn" title="Remove Notice" onclick="return confirm('Delete this announcement?')">
+                                        <span class="material-icons-round" style="font-size: 16px;">delete</span>
+                                    </a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state">
+                                <span class="material-icons-round">campaign</span>
+                                <h3>No Announcements Posted</h3>
+                                <p>Use the form on the left to publish the first bulletin board announcement.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const storedTheme = localStorage.getItem('theme') || 'light';
+        if (storedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.body.classList.remove('light-theme');
+        }
+
+        // Dismiss Toast
+        setTimeout(() => {
+            const toasts = document.querySelectorAll(".toast");
+            toasts.forEach(toast => {
+                toast.style.opacity = "0";
+                toast.style.transform = "translateX(50px)";
+                toast.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+                setTimeout(() => toast.remove(), 400);
+            });
+        }, 4000);
+    </script>
+</body>
+</html>

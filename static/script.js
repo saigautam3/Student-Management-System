@@ -80,9 +80,32 @@ window.addEventListener('DOMContentLoaded', () => {
         switchTab('#dashboard-section');
     }
     
+    
     renderCharts();
     initPagination();
     initBulkSelection();
+
+    // Notification center toggle
+    const bellBtn = document.getElementById("notifBellBtn");
+    const dropdown = document.getElementById("notifDropdown");
+    if (bellBtn && dropdown) {
+        bellBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            dropdown.style.display = dropdown.style.display === "none" ? "flex" : "none";
+        });
+        document.addEventListener("click", () => {
+            dropdown.style.display = "none";
+        });
+        dropdown.addEventListener("click", (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    // Advanced search engine listener
+    const searchInput = document.getElementById("regSearchInput");
+    if (searchInput) {
+        searchInput.addEventListener("input", runEnterpriseSearch);
+    }
 });
 
 // ==================================================
@@ -762,3 +785,130 @@ setTimeout(() => {
         setTimeout(() => toast.remove(), 400);
     });
 }, 4000);
+
+// ==================================================
+// ENTERPRISE ADVANCED SEARCH ENGINE
+// ==================================================
+function runEnterpriseSearch() {
+    const query = document.getElementById("regSearchInput").value.trim().toLowerCase();
+    const rows = document.querySelectorAll("#studentTableBody tr");
+    
+    if (!query) {
+        // Reset rows visibility based on pagination
+        updateTableDisplay();
+        document.getElementById("tablePagination").style.display = "flex";
+        return;
+    }
+
+    // Parse search operators
+    let filterFn = null;
+    const gpaMatch = query.match(/gpa\s*(>|<|=)\s*([0-9.]+)/);
+    const ageMatch = query.match(/age\s*(>|<|=)\s*([0-9]+)/);
+    const statusMatch = query.match(/status\s*=\s*(\w+)/);
+    const deptMatch = query.match(/dept\s*=\s*(\w+)/);
+
+    if (gpaMatch) {
+        const op = gpaMatch[1];
+        const val = parseFloat(gpaMatch[2]);
+        filterFn = (gpa) => {
+            if (op === '>') return gpa > val;
+            if (op === '<') return gpa < val;
+            return gpa === val;
+        };
+    } else if (ageMatch) {
+        const op = ageMatch[1];
+        const val = parseInt(ageMatch[2]);
+        filterFn = (age) => {
+            if (op === '>') return age > val;
+            if (op === '<') return age < val;
+            return age === val;
+        };
+    } else if (statusMatch) {
+        const val = statusMatch[1];
+        filterFn = (status) => status.toLowerCase() === val;
+    } else if (deptMatch) {
+        const val = deptMatch[1];
+        filterFn = (dept) => dept.toLowerCase().includes(val);
+    }
+
+    let visibleCount = 0;
+    rows.forEach(row => {
+        if (row.querySelector("td[colspan]")) return; // skip empty state row
+        
+        const name = row.querySelector(".student-name").textContent.toLowerCase();
+        const email = row.querySelector(".email-link").textContent.toLowerCase();
+        const age = parseInt(row.cells[4].textContent);
+        const dept = row.cells[5].textContent.trim().toLowerCase();
+        const gpa = parseFloat(row.cells[6].textContent);
+        const status = row.cells[7].textContent.trim().toLowerCase();
+
+        let match = false;
+        if (filterFn) {
+            if (gpaMatch) match = filterFn(gpa);
+            else if (ageMatch) match = filterFn(age);
+            else if (statusMatch) match = filterFn(status);
+            else if (deptMatch) match = filterFn(dept);
+        } else {
+            // General string matching
+            match = name.includes(query) || email.includes(query) || dept.includes(query) || status.includes(query);
+        }
+
+        if (match) {
+            row.style.display = "";
+            visibleCount++;
+        } else {
+            row.style.display = "none";
+        }
+    });
+
+    // Hide pagination controls during active search
+    document.getElementById("tablePagination").style.display = "none";
+    document.getElementById("registryCountLabel").textContent = `${visibleCount} records found (filtered)`;
+}
+
+// ==================================================
+// NOTIFICATIONS & AUDIT EVENT FUNCTIONS
+// ==================================================
+function markNotifRead(id) {
+    fetch(`/notifications/read/${id}`, { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            const el = document.getElementById(`notif-item-${id}`);
+            if (el) {
+                el.classList.remove('notif-unread');
+                const markBtn = el.querySelector('button');
+                if (markBtn) markBtn.remove();
+            }
+            // Decrement badge count
+            const badge = document.getElementById('notifBadgeCount');
+            if (badge) {
+                let count = parseInt(badge.textContent) - 1;
+                if (count <= 0) badge.remove();
+                else badge.textContent = count;
+            }
+        }
+    });
+}
+
+function clearAllNotifs() {
+    fetch(`/notifications/clear-all`, { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            document.getElementById('notifList').innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">No notifications.</div>';
+            const badge = document.getElementById('notifBadgeCount');
+            if (badge) badge.remove();
+        }
+    });
+}
+
+function filterTimelineLogs() {
+    const val = document.getElementById("timelineFilterSelect").value;
+    window.location.href = `/?timeline_filter=${val}#dashboard-section`;
+}
+
+// Bind to globals
+window.markNotifRead = markNotifRead;
+window.clearAllNotifs = clearAllNotifs;
+window.filterTimelineLogs = filterTimelineLogs;

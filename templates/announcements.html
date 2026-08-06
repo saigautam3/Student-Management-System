@@ -57,9 +57,15 @@
                     <span class="material-icons-round">campaign</span>
                     <span>Announcements</span>
                 </a>
-                <a href="/settings" class="menu-item">
-                    <span class="material-icons-round">settings</span>
-                    <span>Settings</span>
+                {% if session['user']['role'] == 'Admin' %}
+                <a href="/faculty" class="menu-item" id="menu-faculty">
+                    <span class="material-icons-round">badge</span>
+                    <span>Faculty Management</span>
+                </a>
+                {% endif %}
+                <a href="/profile" class="menu-item" id="menu-profile">
+                    <span class="material-icons-round">manage_accounts</span>
+                    <span>Faculty Profile</span>
                 </a>
                 <a href="/logout" class="menu-item logout-item">
                     <span class="material-icons-round">logout</span>

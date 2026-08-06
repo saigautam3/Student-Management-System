@@ -328,7 +328,7 @@ function renderCharts() {
                     },
                     y: {
                         min: 0,
-                        max: 4,
+                        max: 10,
                         grid: { color: gridColor },
                         ticks: {
                             color: labelColor,
